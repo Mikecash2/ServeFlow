@@ -70,6 +70,7 @@ export default function DashboardPage() {
       <nav style={{ display: "flex", gap: 16, marginBottom: 24, fontSize: 13 }}>
         <Link href="/ministries" style={{ color: "var(--sf-brand-600)" }}>Ministries</Link>
         <Link href="/volunteers" style={{ color: "var(--sf-brand-600)" }}>Volunteers</Link>
+        <Link href="/services" style={{ color: "var(--sf-brand-600)" }}>Services</Link>
       </nav>
 
       {error && <div className="sf-error">{error}</div>}

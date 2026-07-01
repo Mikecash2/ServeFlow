@@ -20,14 +20,14 @@ const DEFAULT_PERMISSIONS: Array<{
   resource: string;
   action: string;
 }> = [
-  ...["church", "campus", "ministry", "team", "volunteer", "service"].flatMap((resource) =>
+  ...["church", "campus", "ministry", "team", "volunteer", "service", "task", "checklist"].flatMap((resource) =>
     ["read", "write", "delete"].map((action) => ({
       role: ChurchRole.CHURCH_ADMIN,
       resource,
       action,
     })),
   ),
-  ...["campus", "ministry", "team", "volunteer", "service"].flatMap((resource) =>
+  ...["campus", "ministry", "team", "volunteer", "service", "task", "checklist"].flatMap((resource) =>
     ["read", "write"].map((action) => ({
       role: ChurchRole.CAMPUS_ADMIN,
       resource,
@@ -41,12 +41,21 @@ const DEFAULT_PERMISSIONS: Array<{
   { role: ChurchRole.MINISTRY_LEADER, resource: "volunteer", action: "write" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "service", action: "read" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "service", action: "write" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "task", action: "read" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "task", action: "write" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "checklist", action: "read" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "checklist", action: "write" },
   { role: ChurchRole.TEAM_LEADER, resource: "team", action: "read" },
   { role: ChurchRole.TEAM_LEADER, resource: "service", action: "read" },
   { role: ChurchRole.TEAM_LEADER, resource: "volunteer", action: "read" },
+  { role: ChurchRole.TEAM_LEADER, resource: "task", action: "read" },
+  { role: ChurchRole.TEAM_LEADER, resource: "task", action: "write" },
+  { role: ChurchRole.TEAM_LEADER, resource: "checklist", action: "read" },
   { role: ChurchRole.VOLUNTEER, resource: "team", action: "read" },
   { role: ChurchRole.VOLUNTEER, resource: "service", action: "read" },
   { role: ChurchRole.VOLUNTEER, resource: "volunteer", action: "read" },
+  { role: ChurchRole.VOLUNTEER, resource: "task", action: "read" },
+  { role: ChurchRole.VOLUNTEER, resource: "checklist", action: "read" },
   { role: ChurchRole.GUEST, resource: "service", action: "read" },
 ];
 

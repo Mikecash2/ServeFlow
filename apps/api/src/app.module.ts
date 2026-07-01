@@ -11,6 +11,10 @@ import { MinistriesModule } from "./modules/ministries/ministries.module";
 import { TeamsModule } from "./modules/teams/teams.module";
 import { VolunteersModule } from "./modules/volunteers/volunteers.module";
 import { AvailabilityModule } from "./modules/availability/availability.module";
+import { ServicesModule } from "./modules/services/services.module";
+import { ServiceRolesModule } from "./modules/service-roles/service-roles.module";
+import { TasksModule } from "./modules/tasks/tasks.module";
+import { ChecklistsModule } from "./modules/checklists/checklists.module";
 
 @Module({
   imports: [
@@ -26,6 +30,10 @@ import { AvailabilityModule } from "./modules/availability/availability.module";
     TeamsModule,
     VolunteersModule,
     AvailabilityModule,
+    ServicesModule,
+    ServiceRolesModule,
+    TasksModule,
+    ChecklistsModule,
   ],
 })
 export class AppModule {}

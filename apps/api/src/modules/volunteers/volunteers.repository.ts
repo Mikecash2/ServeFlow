@@ -135,7 +135,7 @@ export class VolunteersRepository {
       const rows = await query<VolunteerRow>(
         `select ${SELECT_FIELDS} from volunteer_profiles vp
          join users u on u.id = vp.user_id
-         where vp.church_id = $1 and ($2::text is null or vp.status = $2)
+         where vp.church_id = $1 and ($2::text is null or vp.status = $2::volunteer_status)
          order by u.first_name asc, u.last_name asc`,
         [churchId, status ?? null],
       );

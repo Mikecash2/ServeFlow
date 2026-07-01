@@ -14,9 +14,13 @@ architecture, API spec, AI scheduling design, and roadmap.
   volunteer invite + profile (skills, certifications, training records,
   status), availability submission and listing by date range. Seed data
   models Kharis Bristol's Production ministry / Production Team.
-- **Next up — Phase 3:** Services & Tasks.
+- **Phase 3 — Services & Tasks:** done. Service CRUD, ServiceRole with
+  optional required-skill + min experience level, Task module (phases,
+  dependencies, status, photo URLs), checklist templates + per-service
+  checklist instances with item completion.
+- **Next up — Phase 4:** the AI Scheduling Engine.
 
-All of the above is **built and passing** — 20/20 tests (11 unit, 9 integration
+All of the above is **built and passing** — 22/22 tests (11 unit, 11 integration
 against a real Postgres), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (both intentional, both environment-driven)

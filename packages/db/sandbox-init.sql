@@ -346,3 +346,172 @@ create policy tenant_isolation_volunteer_skills on volunteer_skills
   using (volunteer_profile_id in (
     select id from volunteer_profiles where church_id = current_setting('app.current_church_id', true)
   ));
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 3: Services & Tasks (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative.
+-- ─────────────────────────────────────────────────────────────
+
+create type service_type as enum (
+  'SUNDAY_SERVICE', 'WEDNESDAY_SERVICE', 'PRAYER_MEETING', 'CONFERENCE',
+  'WEDDING', 'FUNERAL', 'SPECIAL_EVENT'
+);
+
+create type task_phase as enum ('SETUP', 'SERVICE', 'DERIG');
+
+create type task_status as enum ('NOT_STARTED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED');
+
+create type checklist_kind as enum ('SETUP', 'SERVICE', 'EMERGENCY', 'SHUTDOWN', 'DERIG');
+
+create table services (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  campus_id text not null references campuses(id) on delete cascade,
+  type service_type not null,
+  title text not null,
+  venue text,
+  date timestamptz not null,
+  setup_start timestamptz,
+  soundcheck timestamptz,
+  doors_open timestamptz,
+  service_start timestamptz not null,
+  service_end timestamptz,
+  derig_end timestamptz,
+  expected_attendance int,
+  notes text,
+  guest_speaker text,
+  recurrence_rule text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index on services(church_id, date);
+create index on services(campus_id, date);
+
+create table service_roles (
+  id text primary key default gen_random_uuid()::text,
+  service_id text not null references services(id) on delete cascade,
+  ministry_id text not null references ministries(id) on delete cascade,
+  name text not null,
+  min_required int not null default 1,
+  max_allowed int not null default 1
+);
+create index on service_roles(service_id);
+
+create table service_role_skills (
+  id text primary key default gen_random_uuid()::text,
+  service_role_id text not null references service_roles(id) on delete cascade,
+  skill_id text not null references skills(id) on delete cascade,
+  min_experience_level int not null default 1,
+  unique (service_role_id, skill_id)
+);
+
+create table tasks (
+  id text primary key default gen_random_uuid()::text,
+  service_id text not null references services(id) on delete cascade,
+  phase task_phase not null,
+  title text not null,
+  description text,
+  priority int not null default 3,
+  estimated_minutes int,
+  status task_status not null default 'NOT_STARTED',
+  assigned_volunteer_id text references volunteer_profiles(id) on delete set null,
+  depends_on_task_id text references tasks(id) on delete set null,
+  started_at timestamptz,
+  completed_at timestamptz,
+  photo_urls text[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+create index on tasks(service_id, phase);
+
+create table checklist_templates (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  kind checklist_kind not null,
+  name text not null,
+  created_at timestamptz not null default now()
+);
+create index on checklist_templates(church_id);
+
+create table checklist_template_items (
+  id text primary key default gen_random_uuid()::text,
+  template_id text not null references checklist_templates(id) on delete cascade,
+  label text not null,
+  sort_order int not null default 0,
+  is_required boolean not null default true
+);
+create index on checklist_template_items(template_id);
+
+create table checklist_instances (
+  id text primary key default gen_random_uuid()::text,
+  template_id text not null references checklist_templates(id) on delete cascade,
+  service_id text not null references services(id) on delete cascade,
+  completed_items jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+create index on checklist_instances(service_id);
+
+-- RLS
+alter table services enable row level security;
+alter table service_roles enable row level security;
+alter table service_role_skills enable row level security;
+alter table tasks enable row level security;
+alter table checklist_templates enable row level security;
+alter table checklist_template_items enable row level security;
+alter table checklist_instances enable row level security;
+
+create policy tenant_isolation_services on services
+  using (church_id = current_setting('app.current_church_id', true));
+
+create policy tenant_isolation_service_roles on service_roles
+  using (service_id in (
+    select id from services where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_service_role_skills on service_role_skills
+  using (service_role_id in (
+    select sr.id from service_roles sr
+    join services s on s.id = sr.service_id
+    where s.church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_tasks on tasks
+  using (service_id in (
+    select id from services where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_checklist_templates on checklist_templates
+  using (church_id = current_setting('app.current_church_id', true));
+
+create policy tenant_isolation_checklist_template_items on checklist_template_items
+  using (template_id in (
+    select id from checklist_templates where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_checklist_instances on checklist_instances
+  using (service_id in (
+    select id from services where church_id = current_setting('app.current_church_id', true)
+  ));
+
+-- Default permissions for the new "task" and "checklist" resources.
+-- "service" read/write/delete already exists from the Phase 1 matrix.
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'task', 'read', true, null),
+  ('CHURCH_ADMIN', 'task', 'write', true, null),
+  ('CHURCH_ADMIN', 'task', 'delete', true, null),
+  ('CHURCH_ADMIN', 'checklist', 'read', true, null),
+  ('CHURCH_ADMIN', 'checklist', 'write', true, null),
+  ('CHURCH_ADMIN', 'checklist', 'delete', true, null),
+  ('CAMPUS_ADMIN', 'task', 'read', true, null),
+  ('CAMPUS_ADMIN', 'task', 'write', true, null),
+  ('CAMPUS_ADMIN', 'checklist', 'read', true, null),
+  ('CAMPUS_ADMIN', 'checklist', 'write', true, null),
+  ('MINISTRY_LEADER', 'task', 'read', true, null),
+  ('MINISTRY_LEADER', 'task', 'write', true, null),
+  ('MINISTRY_LEADER', 'checklist', 'read', true, null),
+  ('MINISTRY_LEADER', 'checklist', 'write', true, null),
+  ('TEAM_LEADER', 'task', 'read', true, null),
+  ('TEAM_LEADER', 'task', 'write', true, null),
+  ('TEAM_LEADER', 'checklist', 'read', true, null),
+  ('VOLUNTEER', 'task', 'read', true, null),
+  ('VOLUNTEER', 'checklist', 'read', true, null);
