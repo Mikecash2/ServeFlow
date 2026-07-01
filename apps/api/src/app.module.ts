@@ -19,6 +19,7 @@ import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
 import { EquipmentModule } from "./modules/equipment/equipment.module";
+import { AttendanceModule } from "./modules/attendance/attendance.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { EquipmentModule } from "./modules/equipment/equipment.module";
     DashboardModule,
     RealtimeModule,
     EquipmentModule,
+    AttendanceModule,
   ],
 })
 export class AppModule {}

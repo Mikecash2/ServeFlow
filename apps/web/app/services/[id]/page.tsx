@@ -44,6 +44,15 @@ interface GenerateResult {
   assignments: Assignment[];
 }
 
+interface RosterEntry {
+  volunteerProfileId: string;
+  firstName: string;
+  lastName: string;
+  roleName: string;
+  checkedInAt: string | null;
+  isLate: boolean | null;
+}
+
 interface Task {
   id: string;
   phase: string;
@@ -82,6 +91,7 @@ export default function ServiceDetailPage() {
   const [schedule, setSchedule] = useState<GenerateResult | null>(null);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
 
@@ -93,13 +103,14 @@ export default function ServiceDetailPage() {
 
   async function load() {
     if (!session || !churchId) return;
-    const [svc, mins, rolesRes, tasksRes, templatesRes, instancesRes] = await Promise.all([
+    const [svc, mins, rolesRes, tasksRes, templatesRes, instancesRes, rosterRes] = await Promise.all([
       apiFetch<ServiceDetail>(`/churches/${churchId}/services/${serviceId}`, { accessToken: session.accessToken }),
       apiFetch<Ministry[]>(`/churches/${churchId}/ministries`, { accessToken: session.accessToken }),
       apiFetch<ServiceRole[]>(`/churches/${churchId}/services/${serviceId}/roles`, { accessToken: session.accessToken }),
       apiFetch<Task[]>(`/churches/${churchId}/services/${serviceId}/tasks`, { accessToken: session.accessToken }),
       apiFetch<ChecklistTemplate[]>(`/churches/${churchId}/checklist-templates`, { accessToken: session.accessToken }),
       apiFetch<ChecklistInstance[]>(`/churches/${churchId}/services/${serviceId}/checklist-instances`, { accessToken: session.accessToken }),
+      apiFetch<RosterEntry[]>(`/churches/${churchId}/services/${serviceId}/attendance`, { accessToken: session.accessToken }),
     ]);
     setService(svc);
     setMinistries(mins);
@@ -107,6 +118,7 @@ export default function ServiceDetailPage() {
     setTasks(tasksRes);
     setTemplates(templatesRes);
     setInstances(instancesRes);
+    setRoster(rosterRes);
     setRoleForm((f) => ({ ...f, ministryId: f.ministryId || mins[0]?.id || "" }));
   }
 
@@ -122,6 +134,9 @@ export default function ServiceDetailPage() {
     socket.on("disconnect", () => setLiveConnected(false));
     socket.on("task.updated", (updated: Task) => {
       setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+    });
+    socket.on("checkin.recorded", () => {
+      load().catch(() => {});
     });
     return () => {
       socket.disconnect();
@@ -172,6 +187,20 @@ export default function ServiceDetailPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
+    }
+  }
+
+  async function checkInVolunteer(volunteerProfileId: string) {
+    if (!session || !churchId) return;
+    try {
+      await apiFetch(`/churches/${churchId}/services/${serviceId}/attendance/checkin`, {
+        method: "POST",
+        accessToken: session.accessToken,
+        body: { volunteerProfileId, method: "MANUAL" },
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to check in volunteer");
     }
   }
 
@@ -294,6 +323,33 @@ export default function ServiceDetailPage() {
             })}
           </div>
         )}
+      </div>
+
+      <div className="sf-card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Attendance</h3>
+        {roster.length === 0 && (
+          <p style={{ color: "var(--sf-text-secondary)", fontSize: 14 }}>
+            No roster yet — generate a schedule above to see who's assigned.
+          </p>
+        )}
+        {roster.map((r) => (
+          <div key={r.volunteerProfileId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
+            <span style={{ fontSize: 14 }}>
+              {r.firstName} {r.lastName} <span style={{ color: "var(--sf-text-secondary)", fontSize: 12 }}>· {r.roleName}</span>
+            </span>
+            {r.checkedInAt ? (
+              <span className={`badge ${r.isLate ? "badge-warn" : "badge-ok"}`}>{r.isLate ? "Checked in late" : "Checked in"}</span>
+            ) : (
+              <button
+                className="sf-button"
+                style={{ width: "auto", fontSize: 12, padding: "4px 10px" }}
+                onClick={() => checkInVolunteer(r.volunteerProfileId)}
+              >
+                Check in
+              </button>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="sf-card" style={{ marginBottom: 16 }}>

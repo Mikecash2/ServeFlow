@@ -674,3 +674,58 @@ insert into permissions (role, resource, action, allowed, church_id) values
   ('TEAM_LEADER', 'equipment', 'write', true, null),
   ('VOLUNTEER', 'equipment', 'read', true, null),
   ('VOLUNTEER', 'equipment', 'write', true, null);
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 7: Attendance & Check-in (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative.
+-- ─────────────────────────────────────────────────────────────
+
+create type checkin_method as enum ('QR_CODE', 'MANUAL', 'GPS');
+
+create table attendance (
+  id text primary key default gen_random_uuid()::text,
+  service_id text not null references services(id) on delete cascade,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  expected_at timestamptz,
+  unique (service_id, volunteer_profile_id)
+);
+create index on attendance(service_id);
+
+create table check_ins (
+  id text primary key default gen_random_uuid()::text,
+  attendance_id text not null unique references attendance(id) on delete cascade,
+  user_id text not null references users(id),
+  method checkin_method not null,
+  checked_in_at timestamptz not null default now(),
+  is_late boolean not null default false,
+  gps_lat double precision,
+  gps_lng double precision
+);
+
+alter table attendance enable row level security;
+alter table check_ins enable row level security;
+
+create policy tenant_isolation_attendance on attendance
+  using (service_id in (
+    select id from services where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_check_ins on check_ins
+  using (attendance_id in (
+    select a.id from attendance a
+    join services s on s.id = a.service_id
+    where s.church_id = current_setting('app.current_church_id', true)
+  ));
+
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'attendance', 'read', true, null),
+  ('CHURCH_ADMIN', 'attendance', 'write', true, null),
+  ('CAMPUS_ADMIN', 'attendance', 'read', true, null),
+  ('CAMPUS_ADMIN', 'attendance', 'write', true, null),
+  ('MINISTRY_LEADER', 'attendance', 'read', true, null),
+  ('MINISTRY_LEADER', 'attendance', 'write', true, null),
+  ('TEAM_LEADER', 'attendance', 'read', true, null),
+  ('TEAM_LEADER', 'attendance', 'write', true, null),
+  ('VOLUNTEER', 'attendance', 'read', true, null),
+  ('VOLUNTEER', 'attendance', 'write', true, null);

@@ -35,10 +35,17 @@ architecture, API spec, AI scheduling design, and roadmap.
   reservations with checkout/checkin status transitions, maintenance
   history, and fault reporting that broadcasts a live
   `equipment.fault_reported` alert over the same realtime gateway.
-- **Next up — Phase 7:** Attendance & Check-in.
+- **Phase 7 — Attendance & Check-in:** done. QR/manual/GPS check-in with
+  lateness detection against the service's start time, a live attendance
+  roster (assignments joined with check-in state), a live
+  `checkin.recorded` event, and a reliability-score recompute endpoint that
+  feeds real attendance history back into the Phase 4 scheduler's
+  `reliability` scoring factor. Runs on-demand rather than as a nightly cron
+  job — see deviation #5 below.
+- **Next up — Phase 8:** Messaging (in-app + email).
 
-All of the above is **built and passing** — 33/33 tests (15 unit, 18
-integration against a real Postgres, including two genuine WebSocket tests
+All of the above is **built and passing** — 40/40 tests (19 unit, 21
+integration against a real Postgres, including three genuine WebSocket tests
 with `socket.io-client`), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (all environment-driven, all documented at the call site too)
@@ -80,6 +87,13 @@ with `socket.io-client`), see `apps/api/test`.
    process. Horizontal scaling needs `@socket.io/redis-adapter` wired in,
    which is additive once Redis exists.
 
+5. **Reliability score recomputation is an on-demand endpoint, not a
+   nightly cron job.** No scheduler/cron infrastructure exists in this
+   sandbox. `POST /churches/:churchId/reliability/recompute` runs the exact
+   same `ReliabilityService.recomputeForChurch` logic a real cron trigger
+   would call — wiring it to an actual schedule (Vercel/Fly.io cron, or a
+   BullMQ repeatable job once Redis exists) is additive, not a rework.
+
 ## Local development (on a normal machine)
 
 ```bash
@@ -105,7 +119,7 @@ npm run test --workspace apps/api
 # DATABASE_URL at any local Postgres). These reset the schema using
 # packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
 # isolation, skill-based scheduling exclusion, WebSocket room membership,
-# live fault alerts, etc. — not just that endpoints return 200.
+# live fault/check-in alerts, etc. — not just that endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api
