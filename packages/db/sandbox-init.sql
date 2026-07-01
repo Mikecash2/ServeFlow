@@ -179,3 +179,170 @@ insert into permissions (role, resource, action, allowed, church_id) values
   ('VOLUNTEER', 'service', 'read', true, null),
   ('VOLUNTEER', 'volunteer', 'read', true, null),
   ('GUEST', 'service', 'read', true, null);
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 2: Ministry & Volunteer Management (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative; extend it, not this file,
+-- when adding real migrations.
+-- ─────────────────────────────────────────────────────────────
+
+create type ministry_category as enum (
+  'MEDIA', 'PRODUCTION', 'WORSHIP', 'HOSPITALITY', 'CHILDREN',
+  'SECURITY', 'USHERING', 'PRAYER', 'CLEANING', 'CUSTOM'
+);
+
+create type volunteer_status as enum ('ACTIVE', 'INACTIVE', 'SUSPENDED');
+
+create type availability_status as enum (
+  'AVAILABLE', 'UNAVAILABLE', 'LATE', 'LEAVE_EARLY', 'MAYBE'
+);
+
+create table ministries (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  campus_id text references campuses(id) on delete cascade,
+  name text not null,
+  category ministry_category not null,
+  description text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index on ministries(church_id);
+
+-- Now that ministries exists, wire up the FK memberships.ministry_id was
+-- left without (see the Phase 1 comment on that column).
+alter table memberships
+  add constraint memberships_ministry_id_fkey
+  foreign key (ministry_id) references ministries(id) on delete cascade;
+
+create table teams (
+  id text primary key default gen_random_uuid()::text,
+  ministry_id text not null references ministries(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now()
+);
+create index on teams(ministry_id);
+
+create table volunteer_profiles (
+  id text primary key default gen_random_uuid()::text,
+  user_id text not null unique references users(id) on delete cascade,
+  church_id text not null references churches(id) on delete cascade,
+  emergency_contact_name text,
+  emergency_contact_phone text,
+  status volunteer_status not null default 'ACTIVE',
+  reliability_score double precision not null default 1.0,
+  notes text,
+  joined_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index on volunteer_profiles(church_id);
+
+create table skills (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  name text not null,
+  unique (church_id, name)
+);
+
+create table volunteer_skills (
+  id text primary key default gen_random_uuid()::text,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  skill_id text not null references skills(id) on delete cascade,
+  experience_level int not null default 1,
+  years_experience double precision,
+  unique (volunteer_profile_id, skill_id)
+);
+
+create table certifications (
+  id text primary key default gen_random_uuid()::text,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  name text not null,
+  issued_at timestamptz,
+  expires_at timestamptz,
+  document_url text
+);
+create index on certifications(volunteer_profile_id);
+
+create table training_records (
+  id text primary key default gen_random_uuid()::text,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  course_name text not null,
+  completed_at timestamptz,
+  required_for_roles text[] not null default '{}'
+);
+create index on training_records(volunteer_profile_id);
+
+create table availability (
+  id text primary key default gen_random_uuid()::text,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  date date not null,
+  status availability_status not null,
+  note text,
+  recurrence_rule text,
+  is_holiday_mode boolean not null default false,
+  submitted_at timestamptz not null default now()
+);
+create index on availability(volunteer_profile_id, date);
+
+-- RLS: ministries/teams/volunteer_profiles/certifications/training_records/
+-- availability are all tenant- (or volunteer-, transitively church-) scoped.
+-- Skills reference data follows the same "read across churches is safe,
+-- writes are scoped by church_id in the query" pattern as `permissions` in
+-- Phase 1 rather than RLS, since it's non-sensitive reference data.
+alter table ministries enable row level security;
+alter table teams enable row level security;
+alter table volunteer_profiles enable row level security;
+alter table certifications enable row level security;
+alter table training_records enable row level security;
+alter table availability enable row level security;
+
+create policy tenant_isolation_ministries on ministries
+  using (church_id = current_setting('app.current_church_id', true));
+
+create policy tenant_isolation_volunteer_profiles on volunteer_profiles
+  using (church_id = current_setting('app.current_church_id', true));
+
+-- teams/certifications/training_records/availability don't carry church_id
+-- directly (they hang off ministry_id / volunteer_profile_id) — scope via a
+-- join back to the tenant-scoped parent, which Postgres can use an index for.
+create policy tenant_isolation_teams on teams
+  using (ministry_id in (
+    select id from ministries where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_certifications on certifications
+  using (volunteer_profile_id in (
+    select id from volunteer_profiles where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_training_records on training_records
+  using (volunteer_profile_id in (
+    select id from volunteer_profiles where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_availability on availability
+  using (volunteer_profile_id in (
+    select id from volunteer_profiles where church_id = current_setting('app.current_church_id', true)
+  ));
+
+-- Additional default permissions for Phase 2 resources not already covered
+-- by the Phase 1 matrix above (team-level access, mirrors ministry rules).
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'team', 'read', true, null),
+  ('CHURCH_ADMIN', 'team', 'write', true, null),
+  ('CHURCH_ADMIN', 'team', 'delete', true, null),
+  ('CAMPUS_ADMIN', 'team', 'read', true, null),
+  ('CAMPUS_ADMIN', 'team', 'write', true, null),
+  ('MINISTRY_LEADER', 'team', 'read', true, null),
+  ('MINISTRY_LEADER', 'team', 'write', true, null),
+  ('TEAM_LEADER', 'team', 'read', true, null),
+  ('VOLUNTEER', 'team', 'read', true, null);
+
+-- volunteer_skills was missed above: it links to volunteer_profile_id (tenant
+-- data) even though skills itself is treated as shared reference data.
+alter table volunteer_skills enable row level security;
+create policy tenant_isolation_volunteer_skills on volunteer_skills
+  using (volunteer_profile_id in (
+    select id from volunteer_profiles where church_id = current_setting('app.current_church_id', true)
+  ));

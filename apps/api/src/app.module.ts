@@ -7,6 +7,10 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { ChurchesModule } from "./modules/churches/churches.module";
 import { CampusesModule } from "./modules/campuses/campuses.module";
 import { HealthModule } from "./modules/health/health.module";
+import { MinistriesModule } from "./modules/ministries/ministries.module";
+import { TeamsModule } from "./modules/teams/teams.module";
+import { VolunteersModule } from "./modules/volunteers/volunteers.module";
+import { AvailabilityModule } from "./modules/availability/availability.module";
 
 @Module({
   imports: [
@@ -18,6 +22,10 @@ import { HealthModule } from "./modules/health/health.module";
     ChurchesModule,
     CampusesModule,
     HealthModule,
+    MinistriesModule,
+    TeamsModule,
+    VolunteersModule,
+    AvailabilityModule,
   ],
 })
 export class AppModule {}

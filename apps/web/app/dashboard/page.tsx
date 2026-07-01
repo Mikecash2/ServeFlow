@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api-client";
 
@@ -52,7 +53,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <h1 style={{ fontSize: 22, margin: 0 }}>
             {church ? church.name : "Loading church..."}
@@ -65,6 +66,11 @@ export default function DashboardPage() {
           Log out
         </button>
       </div>
+
+      <nav style={{ display: "flex", gap: 16, marginBottom: 24, fontSize: 13 }}>
+        <Link href="/ministries" style={{ color: "var(--sf-brand-600)" }}>Ministries</Link>
+        <Link href="/volunteers" style={{ color: "var(--sf-brand-600)" }}>Volunteers</Link>
+      </nav>
 
       {error && <div className="sf-error">{error}</div>}
 
@@ -88,7 +94,7 @@ export default function DashboardPage() {
       </div>
 
       <p style={{ fontSize: 13, color: "var(--sf-text-secondary)", marginTop: 24 }}>
-        This is the Phase 1 dashboard stub — see dashboard-mockup.html in
+        This is the Phase 1/2 dashboard stub — see dashboard-mockup.html in
         ServeFlow-Docs for the full target design; Phase 5 of the roadmap
         builds the real widget-based dashboard against live scheduling data.
       </p>

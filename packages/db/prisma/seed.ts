@@ -1,7 +1,8 @@
 /**
- * Seeds a demo church so Phase 1 auth/RBAC flows have something to exercise
- * end to end: the default permission matrix, one church, one campus, and a
- * Church Admin user.
+ * Seeds a demo church so Phase 1/2 flows have something to exercise end to
+ * end: the default permission matrix, one church (Kharis Bristol), one
+ * campus, a Production ministry with a Production Team, and a Church Admin
+ * user.
  *
  * Run with: npm run seed --workspace packages/db
  */
@@ -19,14 +20,14 @@ const DEFAULT_PERMISSIONS: Array<{
   resource: string;
   action: string;
 }> = [
-  ...["church", "campus", "ministry", "volunteer", "service"].flatMap((resource) =>
+  ...["church", "campus", "ministry", "team", "volunteer", "service"].flatMap((resource) =>
     ["read", "write", "delete"].map((action) => ({
       role: ChurchRole.CHURCH_ADMIN,
       resource,
       action,
     })),
   ),
-  ...["campus", "ministry", "volunteer", "service"].flatMap((resource) =>
+  ...["campus", "ministry", "team", "volunteer", "service"].flatMap((resource) =>
     ["read", "write"].map((action) => ({
       role: ChurchRole.CAMPUS_ADMIN,
       resource,
@@ -34,12 +35,16 @@ const DEFAULT_PERMISSIONS: Array<{
     })),
   ),
   { role: ChurchRole.MINISTRY_LEADER, resource: "ministry", action: "read" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "team", action: "read" },
+  { role: ChurchRole.MINISTRY_LEADER, resource: "team", action: "write" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "volunteer", action: "read" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "volunteer", action: "write" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "service", action: "read" },
   { role: ChurchRole.MINISTRY_LEADER, resource: "service", action: "write" },
+  { role: ChurchRole.TEAM_LEADER, resource: "team", action: "read" },
   { role: ChurchRole.TEAM_LEADER, resource: "service", action: "read" },
   { role: ChurchRole.TEAM_LEADER, resource: "volunteer", action: "read" },
+  { role: ChurchRole.VOLUNTEER, resource: "team", action: "read" },
   { role: ChurchRole.VOLUNTEER, resource: "service", action: "read" },
   { role: ChurchRole.VOLUNTEER, resource: "volunteer", action: "read" },
   { role: ChurchRole.GUEST, resource: "service", action: "read" },
@@ -62,14 +67,14 @@ async function main() {
     });
   }
 
-  console.log("Seeding demo church...");
+  console.log("Seeding Kharis Bristol...");
   const church = await prisma.church.upsert({
-    where: { slug: "grace-chapel" },
+    where: { slug: "kharis-bristol" },
     update: {},
     create: {
-      name: "Grace Chapel",
-      slug: "grace-chapel",
-      timezone: "Africa/Lagos",
+      name: "Kharis Bristol",
+      slug: "kharis-bristol",
+      timezone: "Europe/London",
       primaryColor: "#4F46E5",
     },
   });
@@ -83,13 +88,37 @@ async function main() {
     });
   }
 
+  let productionMinistry = await prisma.ministry.findFirst({
+    where: { churchId: church.id, name: "Production" },
+  });
+  if (!productionMinistry) {
+    productionMinistry = await prisma.ministry.create({
+      data: {
+        churchId: church.id,
+        campusId: campus.id,
+        name: "Production",
+        category: "PRODUCTION",
+        description: "Sound, lighting, streaming, and stage production for services.",
+      },
+    });
+  }
+
+  const productionTeam = await prisma.team.findFirst({
+    where: { ministryId: productionMinistry.id, name: "Production Team" },
+  });
+  if (!productionTeam) {
+    await prisma.team.create({
+      data: { ministryId: productionMinistry.id, name: "Production Team" },
+    });
+  }
+
   const passwordHash = await argon2.hash("ChangeMe123!");
   const adminUser = await prisma.user.upsert({
-    where: { email: "admin@gracechapel.test" },
+    where: { email: "admin@kharisbristol.test" },
     update: {},
     create: {
-      email: "admin@gracechapel.test",
-      firstName: "Grace",
+      email: "admin@kharisbristol.test",
+      firstName: "Kharis",
       lastName: "Admin",
       passwordHash,
     },
@@ -117,7 +146,8 @@ async function main() {
   console.log("Seed complete:");
   console.log(`  Church: ${church.name} (${church.id})`);
   console.log(`  Campus: ${campus.name} (${campus.id})`);
-  console.log(`  Admin login: admin@gracechapel.test / ChangeMe123!`);
+  console.log(`  Ministry: ${productionMinistry.name} > Production Team`);
+  console.log(`  Admin login: admin@kharisbristol.test / ChangeMe123!`);
 }
 
 main()
