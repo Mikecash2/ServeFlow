@@ -29,13 +29,17 @@ architecture, API spec, AI scheduling design, and roadmap.
   setup/de-rig progress, missing volunteers, and AI recommendations in one
   call; a WebSocket gateway (`/realtime` namespace) broadcasts task-status
   updates to clients with verified church membership, shown live on the
-  service detail page. Attendance/check-in live updates are out of scope
-  until Phase 7 builds Attendance itself.
-- **Next up — Phase 6:** Equipment Management.
+  service detail page.
+- **Phase 6 — Equipment Management:** done. Inventory with auto-generated QR
+  codes (rendered to a scannable PNG on demand via the `qrcode` package),
+  reservations with checkout/checkin status transitions, maintenance
+  history, and fault reporting that broadcasts a live
+  `equipment.fault_reported` alert over the same realtime gateway.
+- **Next up — Phase 7:** Attendance & Check-in.
 
-All of the above is **built and passing** — 31/31 tests (15 unit, 16
-integration against a real Postgres, including a genuine WebSocket test with
-`socket.io-client`), see `apps/api/test`.
+All of the above is **built and passing** — 33/33 tests (15 unit, 18
+integration against a real Postgres, including two genuine WebSocket tests
+with `socket.io-client`), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (all environment-driven, all documented at the call site too)
 
@@ -101,7 +105,7 @@ npm run test --workspace apps/api
 # DATABASE_URL at any local Postgres). These reset the schema using
 # packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
 # isolation, skill-based scheduling exclusion, WebSocket room membership,
-# etc. — not just that endpoints return 200.
+# live fault alerts, etc. — not just that endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api

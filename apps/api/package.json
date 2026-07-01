@@ -23,7 +23,8 @@
     "uuid": "^9.0.1",
     "@nestjs/websockets": "^10.4.4",
     "@nestjs/platform-socket.io": "^10.4.4",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@nestjs/testing": "^10.4.4",
@@ -37,6 +38,7 @@
     "vitest": "^2.0.5",
     "supertest": "^7.0.0",
     "@types/supertest": "^6.0.2",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "@types/qrcode": "^1.5.5"
   }
 }

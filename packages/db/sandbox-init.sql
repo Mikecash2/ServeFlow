@@ -576,3 +576,101 @@ create policy tenant_isolation_assignments on assignments
     join services s on s.id = sr.service_id
     where s.church_id = current_setting('app.current_church_id', true)
   ));
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 6: Equipment Management (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative.
+-- ─────────────────────────────────────────────────────────────
+
+create type equipment_status as enum ('AVAILABLE', 'IN_USE', 'UNDER_MAINTENANCE', 'RETIRED');
+create type fault_severity as enum ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+
+create table equipment (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  campus_id text references campuses(id) on delete cascade,
+  name text not null,
+  category text not null,
+  qr_code text unique,
+  barcode text unique,
+  status equipment_status not null default 'AVAILABLE',
+  storage_location text,
+  battery_level_pct int,
+  warranty_expires_at timestamptz,
+  assigned_volunteer_id text references volunteer_profiles(id) on delete set null,
+  purchased_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index on equipment(church_id);
+create unique index on equipment(qr_code);
+
+create table maintenance_records (
+  id text primary key default gen_random_uuid()::text,
+  equipment_id text not null references equipment(id) on delete cascade,
+  performed_at timestamptz not null,
+  description text not null,
+  cost double precision,
+  performed_by text
+);
+create index on maintenance_records(equipment_id);
+
+create table equipment_reservations (
+  id text primary key default gen_random_uuid()::text,
+  equipment_id text not null references equipment(id) on delete cascade,
+  service_id text references services(id) on delete set null,
+  reserved_from timestamptz not null,
+  reserved_to timestamptz not null,
+  checked_out_at timestamptz,
+  checked_in_at timestamptz
+);
+create index on equipment_reservations(equipment_id);
+create index on equipment_reservations(service_id);
+
+create table fault_reports (
+  id text primary key default gen_random_uuid()::text,
+  equipment_id text not null references equipment(id) on delete cascade,
+  reported_by_id text not null references users(id),
+  severity fault_severity not null,
+  description text not null,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index on fault_reports(equipment_id);
+
+alter table equipment enable row level security;
+alter table maintenance_records enable row level security;
+alter table equipment_reservations enable row level security;
+alter table fault_reports enable row level security;
+
+create policy tenant_isolation_equipment on equipment
+  using (church_id = current_setting('app.current_church_id', true));
+
+create policy tenant_isolation_maintenance_records on maintenance_records
+  using (equipment_id in (
+    select id from equipment where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_equipment_reservations on equipment_reservations
+  using (equipment_id in (
+    select id from equipment where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_fault_reports on fault_reports
+  using (equipment_id in (
+    select id from equipment where church_id = current_setting('app.current_church_id', true)
+  ));
+
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'equipment', 'read', true, null),
+  ('CHURCH_ADMIN', 'equipment', 'write', true, null),
+  ('CHURCH_ADMIN', 'equipment', 'delete', true, null),
+  ('CAMPUS_ADMIN', 'equipment', 'read', true, null),
+  ('CAMPUS_ADMIN', 'equipment', 'write', true, null),
+  ('MINISTRY_LEADER', 'equipment', 'read', true, null),
+  ('MINISTRY_LEADER', 'equipment', 'write', true, null),
+  ('TEAM_LEADER', 'equipment', 'read', true, null),
+  ('TEAM_LEADER', 'equipment', 'write', true, null),
+  ('VOLUNTEER', 'equipment', 'read', true, null),
+  ('VOLUNTEER', 'equipment', 'write', true, null);

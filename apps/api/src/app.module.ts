@@ -18,6 +18,7 @@ import { ChecklistsModule } from "./modules/checklists/checklists.module";
 import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
+import { EquipmentModule } from "./modules/equipment/equipment.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { RealtimeModule } from "./modules/realtime/realtime.module";
     SchedulingModule,
     DashboardModule,
     RealtimeModule,
+    EquipmentModule,
   ],
 })
 export class AppModule {}

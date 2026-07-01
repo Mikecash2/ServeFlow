@@ -77,4 +77,8 @@ export class RealtimeGateway implements OnGatewayConnection {
   emitCoverageChanged(churchId: string, payload: unknown) {
     this.server?.to(`church:${churchId}`).emit("coverage.changed", payload);
   }
+
+  emitEquipmentFault(churchId: string, payload: unknown) {
+    this.server?.to(`church:${churchId}`).emit("equipment.fault_reported", payload);
+  }
 }
