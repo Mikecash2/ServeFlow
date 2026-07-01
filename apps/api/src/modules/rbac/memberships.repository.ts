@@ -78,4 +78,48 @@ export class MembershipsRepository {
       return rows.map(toSummary);
     });
   }
+
+  /**
+   * Ties a volunteer to a ministry (e.g. "Dave is part of Production") via a
+   * dedicated Membership row scoped to that ministry — separate from the
+   * general church-wide VOLUNTEER membership created at invite time. The AI
+   * scheduling engine (Phase 4) uses this to build the eligible candidate
+   * pool for a ServiceRole: only volunteers with a ministry-scoped
+   * membership for that role's ministry are considered.
+   */
+  async assignVolunteerToMinistry(params: {
+    churchId: string;
+    ministryId: string;
+    userId: string;
+  }): Promise<MembershipSummary> {
+    return this.tenantDb.runInTenantContext(params.churchId, async (query) => {
+      const existing = await query<MembershipRow>(
+        `select id, church_id, campus_id, ministry_id, role from memberships
+         where user_id = $1 and church_id = $2 and ministry_id = $3 and role = 'VOLUNTEER'`,
+        [params.userId, params.churchId, params.ministryId],
+      );
+      if (existing[0]) return toSummary(existing[0]);
+
+      const rows = await query<MembershipRow>(
+        `insert into memberships (user_id, church_id, ministry_id, role)
+         values ($1, $2, $3, 'VOLUNTEER')
+         returning id, church_id, campus_id, ministry_id, role`,
+        [params.userId, params.churchId, params.ministryId],
+      );
+      return toSummary(rows[0]);
+    });
+  }
+
+  /** Volunteer profile ids (not user ids) tied to a ministry, for scheduling. */
+  async listVolunteerProfileIdsForMinistry(churchId: string, ministryId: string): Promise<string[]> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query<{ id: string }>(
+        `select vp.id from memberships m
+         join volunteer_profiles vp on vp.user_id = m.user_id and vp.church_id = m.church_id
+         where m.church_id = $1 and m.ministry_id = $2 and m.role = 'VOLUNTEER' and m.is_active = true`,
+        [churchId, ministryId],
+      );
+      return rows.map((r) => r.id);
+    });
+  }
 }

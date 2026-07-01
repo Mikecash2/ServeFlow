@@ -15,6 +15,7 @@ import { ServicesModule } from "./modules/services/services.module";
 import { ServiceRolesModule } from "./modules/service-roles/service-roles.module";
 import { TasksModule } from "./modules/tasks/tasks.module";
 import { ChecklistsModule } from "./modules/checklists/checklists.module";
+import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ChecklistsModule } from "./modules/checklists/checklists.module";
     ServiceRolesModule,
     TasksModule,
     ChecklistsModule,
+    SchedulingModule,
   ],
 })
 export class AppModule {}

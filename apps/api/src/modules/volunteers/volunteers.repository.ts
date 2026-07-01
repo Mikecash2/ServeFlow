@@ -183,6 +183,26 @@ export class VolunteersRepository {
     });
   }
 
+  /**
+   * Backs the `preferenceMatch` scoring factor in the AI scheduling engine
+   * (Phase 4) — a simplified stand-in for schema.prisma's PreferredRole
+   * model, matching by role NAME rather than a specific per-service
+   * ServiceRole row. See packages/db/sandbox-init.sql for why.
+   */
+  async addPreferredRoleName(churchId: string, volunteerProfileId: string, roleName: string): Promise<string[]> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query<{ preferred_role_names: string[] }>(
+        `update volunteer_profiles set
+           preferred_role_names = array(select distinct unnest(preferred_role_names || $2::text[])),
+           updated_at = now()
+         where id = $1 and church_id = $3
+         returning preferred_role_names`,
+        [volunteerProfileId, [roleName], churchId],
+      );
+      return rows[0]?.preferred_role_names ?? [];
+    });
+  }
+
   async updateStatus(
     churchId: string,
     volunteerProfileId: string,

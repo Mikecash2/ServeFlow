@@ -7,5 +7,6 @@ import { ServicesModule } from "../services/services.module";
   imports: [ServicesModule],
   controllers: [ServiceRolesController],
   providers: [ServiceRolesRepository],
+  exports: [ServiceRolesRepository],
 })
 export class ServiceRolesModule {}

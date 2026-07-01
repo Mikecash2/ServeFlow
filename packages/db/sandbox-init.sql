@@ -515,3 +515,64 @@ insert into permissions (role, resource, action, allowed, church_id) values
   ('TEAM_LEADER', 'checklist', 'read', true, null),
   ('VOLUNTEER', 'task', 'read', true, null),
   ('VOLUNTEER', 'checklist', 'read', true, null);
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 4: AI Scheduling Engine (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative.
+--
+-- Simplification vs. schema.prisma: `PreferredRole` (which links a volunteer
+-- to a specific ServiceRole row) is replaced here with a plain
+-- `preferred_role_names text[]` column on volunteer_profiles. ServiceRole
+-- rows are recreated per service occurrence, so "prefers this exact row" is
+-- a less useful signal than "prefers roles named X" — matching by name is
+-- what the algorithm actually needs. Revisit if/when recurring services
+-- (Phase 3's deferred RRULE expansion) makes ServiceRole rows longer-lived.
+-- ─────────────────────────────────────────────────────────────
+
+alter table volunteer_profiles add column preferred_role_names text[] not null default '{}';
+
+create type schedule_run_status as enum ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED');
+create type assignment_source as enum ('AI_GENERATED', 'MANUAL_OVERRIDE', 'SELF_SIGNUP');
+
+create table schedule_runs (
+  id text primary key default gen_random_uuid()::text,
+  service_id text not null references services(id) on delete cascade,
+  status schedule_run_status not null default 'PENDING',
+  triggered_by_id text not null references users(id),
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  coverage_pct double precision,
+  summary text
+);
+create index on schedule_runs(service_id);
+
+create table assignments (
+  id text primary key default gen_random_uuid()::text,
+  schedule_run_id text not null references schedule_runs(id) on delete cascade,
+  service_role_id text not null references service_roles(id) on delete cascade,
+  volunteer_profile_id text not null references volunteer_profiles(id) on delete cascade,
+  source assignment_source not null default 'AI_GENERATED',
+  score double precision not null,
+  reasoning jsonb not null default '{}',
+  confirmed_at timestamptz,
+  declined_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index on assignments(schedule_run_id);
+create index on assignments(volunteer_profile_id);
+
+alter table schedule_runs enable row level security;
+alter table assignments enable row level security;
+
+create policy tenant_isolation_schedule_runs on schedule_runs
+  using (service_id in (
+    select id from services where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_assignments on assignments
+  using (schedule_run_id in (
+    select sr.id from schedule_runs sr
+    join services s on s.id = sr.service_id
+    where s.church_id = current_setting('app.current_church_id', true)
+  ));

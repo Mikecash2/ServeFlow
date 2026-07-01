@@ -28,6 +28,21 @@ interface ServiceRole {
   maxAllowed: number;
 }
 
+interface Assignment {
+  id: string;
+  serviceRoleId: string;
+  volunteerProfileId: string;
+  score: number;
+  source: string;
+}
+
+interface GenerateResult {
+  runId: string;
+  coveragePct: number;
+  summary: string;
+  assignments: Assignment[];
+}
+
 interface Task {
   id: string;
   phase: string;
@@ -63,6 +78,9 @@ export default function ServiceDetailPage() {
   const [instances, setInstances] = useState<ChecklistInstance[]>([]);
   const [roleForm, setRoleForm] = useState({ ministryId: "", name: "" });
   const [taskForm, setTaskForm] = useState({ phase: "SETUP", title: "" });
+  const [schedule, setSchedule] = useState<GenerateResult | null>(null);
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const churchId = session?.user.memberships[0]?.churchId;
@@ -155,6 +173,36 @@ export default function ServiceDetailPage() {
     }
   }
 
+  async function generateSchedule() {
+    if (!session || !churchId) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await apiFetch<GenerateResult>(`/churches/${churchId}/services/${serviceId}/schedule-runs`, {
+        method: "POST",
+        accessToken: session.accessToken,
+      });
+      setSchedule(result);
+      setExplanations({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate schedule");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function showWhy(assignmentId: string) {
+    if (!session || !churchId) return;
+    try {
+      const res = await apiFetch<{ explanation: string }>(`/churches/${churchId}/assignments/${assignmentId}/explain`, {
+        accessToken: session.accessToken,
+      });
+      setExplanations((e) => ({ ...e, [assignmentId]: res.explanation }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load explanation");
+    }
+  }
+
   if (loading || !session || !service) return <div className="sf-auth-shell">Loading...</div>;
 
   return (
@@ -194,6 +242,42 @@ export default function ServiceDetailPage() {
           />
           <button className="sf-button" type="submit">Add role</button>
         </form>
+      </div>
+
+      <div className="sf-card ai-card" style={{ marginBottom: 16, background: "linear-gradient(180deg, rgba(2,132,199,0.06), rgba(2,132,199,0.02))", border: "1px solid rgba(2,132,199,0.25)" }}>
+        <h3 style={{ marginTop: 0 }}>AI Scheduling</h3>
+        <button className="sf-button" style={{ width: "auto" }} onClick={generateSchedule} disabled={generating}>
+          {generating ? "Generating..." : "Generate Schedule"}
+        </button>
+        {schedule && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 13, color: "var(--sf-text-secondary)" }}>
+              Coverage: {schedule.coveragePct}% — {schedule.summary}
+            </p>
+            {schedule.assignments.map((a) => {
+              const role = roles.find((r) => r.id === a.serviceRoleId);
+              return (
+                <div key={a.id} style={{ padding: "8px 0", borderTop: "1px solid var(--sf-border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14 }}>
+                      {role?.name ?? a.serviceRoleId} — score {(a.score * 100).toFixed(0)}% ({a.source})
+                    </span>
+                    <button
+                      className="sf-button"
+                      style={{ width: "auto", fontSize: 12, padding: "4px 10px" }}
+                      onClick={() => showWhy(a.id)}
+                    >
+                      Why?
+                    </button>
+                  </div>
+                  {explanations[a.id] && (
+                    <p style={{ fontSize: 13, color: "var(--sf-text-secondary)", marginTop: 6 }}>{explanations[a.id]}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="sf-card" style={{ marginBottom: 16 }}>

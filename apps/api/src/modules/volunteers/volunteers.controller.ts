@@ -12,6 +12,7 @@ import { updateStatusSchema, UpdateStatusDto } from "./dto/update-status.dto";
 import { addSkillSchema, AddSkillDto } from "./dto/add-skill.dto";
 import { addCertificationSchema, AddCertificationDto } from "./dto/add-certification.dto";
 import { addTrainingSchema, AddTrainingDto } from "./dto/add-training.dto";
+import { addPreferredRoleSchema, AddPreferredRoleDto } from "./dto/add-preferred-role.dto";
 
 @Controller("churches/:churchId/volunteers")
 @UseGuards(PermissionGuard)
@@ -111,5 +112,17 @@ export class VolunteersController {
   ) {
     await this.assertExists(churchId, volunteerId);
     return this.training.add({ churchId, volunteerProfileId: volunteerId, ...dto });
+  }
+
+  @Post(":volunteerId/preferred-roles")
+  @RequirePermission({ resource: "volunteer", action: "write" })
+  async addPreferredRole(
+    @Param("churchId") churchId: string,
+    @Param("volunteerId") volunteerId: string,
+    @Body(new ZodValidationPipe(addPreferredRoleSchema)) dto: AddPreferredRoleDto,
+  ) {
+    await this.assertExists(churchId, volunteerId);
+    const preferredRoleNames = await this.volunteers.addPreferredRoleName(churchId, volunteerId, dto.roleName);
+    return { preferredRoleNames };
   }
 }
