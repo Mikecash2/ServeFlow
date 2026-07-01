@@ -87,6 +87,29 @@ export class AvailabilityRepository {
     });
   }
 
+  async submitBulk(params: {
+    churchId: string;
+    volunteerProfileId: string;
+    dates: string[];
+    status: AvailabilityStatus;
+    recurrenceRule: string;
+    note?: string;
+  }): Promise<AvailabilityRecord[]> {
+    return this.tenantDb.runInTenantContext(params.churchId, async (query) => {
+      const results: AvailabilityRecord[] = [];
+      for (const date of params.dates) {
+        const rows = await query<AvailabilityRow>(
+          `insert into availability (volunteer_profile_id, date, status, note, recurrence_rule)
+           values ($1, $2, $3, $4, $5)
+           returning id, volunteer_profile_id, date, status, note, recurrence_rule, is_holiday_mode`,
+          [params.volunteerProfileId, date, params.status, params.note ?? null, params.recurrenceRule],
+        );
+        results.push(toRecord(rows[0]));
+      }
+      return results;
+    });
+  }
+
   async update(
     churchId: string,
     availabilityId: string,

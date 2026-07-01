@@ -25,7 +25,9 @@
     "@nestjs/platform-socket.io": "^10.4.4",
     "socket.io": "^4.7.5",
     "qrcode": "^1.5.4",
-    "resend": "^4.0.1"
+    "resend": "^4.0.1",
+    "rrule": "^2.8.1",
+    "ics": "^3.8.1"
   },
   "devDependencies": {
     "@nestjs/testing": "^10.4.4",

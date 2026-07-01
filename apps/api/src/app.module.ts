@@ -24,6 +24,8 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { MessagingModule } from "./modules/messaging/messaging.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { AssistantModule } from "./modules/assistant/assistant.module";
+import { RecurrenceModule } from "./modules/recurrence/recurrence.module";
+import { CalendarModule } from "./modules/calendar/calendar.module";
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { AssistantModule } from "./modules/assistant/assistant.module";
     MessagingModule,
     AnalyticsModule,
     AssistantModule,
+    RecurrenceModule,
+    CalendarModule,
   ],
 })
 export class AppModule {}

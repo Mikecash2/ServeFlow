@@ -150,6 +150,49 @@ export class ServicesRepository {
     });
   }
 
+  /**
+   * Materializes N shifted copies of an existing service — e.g. every
+   * Sunday for the next 8 weeks — closing the Phase 3 deferral. Each copy
+   * shares the same campus/type/venue/notes but has every timeline field
+   * shifted by the same delta as its occurrence date. Roles and tasks are
+   * NOT copied (a documented scope simplification, see docs/08-roadmap.md
+   * Phase 10) — a leader adds those to each generated occurrence, or a
+   * future "copy roles from template" feature could automate it.
+   */
+  async createShiftedCopies(
+    churchId: string,
+    template: ServiceRecord,
+    occurrenceDates: Date[],
+  ): Promise<ServiceRecord[]> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const templateStart = new Date(template.serviceStart).getTime();
+      const results: ServiceRecord[] = [];
+
+      const shift = (iso: string | null, deltaMs: number): string | null =>
+        iso ? new Date(new Date(iso).getTime() + deltaMs).toISOString() : null;
+
+      for (const occurrenceDate of occurrenceDates) {
+        const deltaMs = occurrenceDate.getTime() - templateStart;
+        const rows = await query<ServiceRow>(
+          `insert into services
+             (church_id, campus_id, type, title, venue, date, setup_start, soundcheck,
+              doors_open, service_start, service_end, derig_end, expected_attendance,
+              notes, guest_speaker)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           returning ${FIELDS}`,
+          [
+            churchId, template.campusId, template.type, template.title, template.venue,
+            shift(template.date, deltaMs), shift(template.setupStart, deltaMs), shift(template.soundcheck, deltaMs),
+            shift(template.doorsOpen, deltaMs), occurrenceDate.toISOString(), shift(template.serviceEnd, deltaMs),
+            shift(template.derigEnd, deltaMs), template.expectedAttendance, template.notes, template.guestSpeaker,
+          ],
+        );
+        results.push(toRecord(rows[0]));
+      }
+      return results;
+    });
+  }
+
   async cancel(churchId: string, serviceId: string): Promise<boolean> {
     return this.tenantDb.runInTenantContext(churchId, async (query) => {
       const rows = await query<{ id: string }>(

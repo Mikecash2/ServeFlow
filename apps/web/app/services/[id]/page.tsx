@@ -92,6 +92,8 @@ export default function ServiceDetailPage() {
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [recurringCount, setRecurringCount] = useState(4);
+  const [recurringMessage, setRecurringMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
 
@@ -187,6 +189,21 @@ export default function ServiceDetailPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
+    }
+  }
+
+  async function generateRecurring() {
+    if (!session || !churchId) return;
+    setRecurringMessage(null);
+    try {
+      const created = await apiFetch<{ id: string }[]>(`/churches/${churchId}/services/${serviceId}/generate-recurring`, {
+        method: "POST",
+        accessToken: session.accessToken,
+        body: { count: recurringCount },
+      });
+      setRecurringMessage(`Created ${created.length} upcoming occurrence(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate recurring occurrences (does this service have a recurrenceRule?)");
     }
   }
 
@@ -290,6 +307,24 @@ export default function ServiceDetailPage() {
         {service.type} · {new Date(service.date).toLocaleString()}
       </p>
       {error && <div className="sf-error">{error}</div>}
+
+      <div className="sf-card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 13 }}>Generate</span>
+        <input
+          type="number"
+          min={1}
+          max={26}
+          className="sf-input"
+          style={{ width: 60, marginBottom: 0 }}
+          value={recurringCount}
+          onChange={(e) => setRecurringCount(Number(e.target.value))}
+        />
+        <span style={{ fontSize: 13 }}>upcoming occurrences from this service&apos;s recurrenceRule</span>
+        <button className="sf-button" style={{ width: "auto" }} onClick={generateRecurring}>
+          Generate
+        </button>
+        {recurringMessage && <span style={{ fontSize: 12, color: "var(--sf-success-500)" }}>{recurringMessage}</span>}
+      </div>
 
       <div className="sf-card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Roles</h3>

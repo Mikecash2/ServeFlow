@@ -5,63 +5,39 @@ architecture, API spec, AI scheduling design, and roadmap.
 
 ## Status
 
-- **Phase 1 — Auth & RBAC foundation:** done. Local JWT auth (provider-agnostic —
-  Supabase/Clerk can replace `LocalAuthProvider` in
-  `apps/api/src/modules/auth/providers` later without touching call sites),
-  Church/Campus CRUD, Membership-based RBAC with a `PermissionGuard`, and
-  Postgres Row-Level Security as a second enforcement layer.
-- **Phase 2 — Ministry & Volunteer Management:** done. Ministry/Team CRUD,
-  volunteer invite + profile (skills, certifications, training records,
-  status), availability submission and listing by date range. Seed data
-  models Kharis Bristol's Production ministry / Production Team.
-- **Phase 3 — Services & Tasks:** done. Service CRUD, ServiceRole with
-  optional required-skill + min experience level, Task module (phases,
-  dependencies, status, photo URLs), checklist templates + per-service
-  checklist instances with item completion.
-- **Phase 4 — AI Scheduling Engine:** done. Hard-constraint candidate
-  resolution (active status, ministry membership, availability, required
-  skills, no double-booking), 5-factor weighted scoring, greedy per-role
-  fill, explainability endpoint, manual override. Runs synchronously
-  in-request rather than as a queued job with WebSocket progress (no
-  Redis/BullMQ in this sandbox — see deviation #3 below).
-- **Phase 5 — Dashboard & Live Day-Of View:** done. `GET
-  /churches/:churchId/dashboard` aggregates coverage %, availability %,
-  setup/de-rig progress, missing volunteers, and AI recommendations in one
-  call; a WebSocket gateway (`/realtime` namespace) broadcasts task-status
-  updates to clients with verified church membership, shown live on the
-  service detail page.
-- **Phase 6 — Equipment Management:** done. Inventory with auto-generated QR
-  codes (rendered to a scannable PNG on demand via the `qrcode` package),
-  reservations with checkout/checkin status transitions, maintenance
-  history, and fault reporting that broadcasts a live
-  `equipment.fault_reported` alert over the same realtime gateway.
-- **Phase 7 — Attendance & Check-in:** done. QR/manual/GPS check-in with
-  lateness detection against the service's start time, a live attendance
-  roster (assignments joined with check-in state), a live
-  `checkin.recorded` event, and a reliability-score recompute endpoint that
-  feeds real attendance history back into the Phase 4 scheduler's
-  `reliability` scoring factor. Runs on-demand rather than as a nightly cron
-  job — see deviation #5 below.
-- **Phase 8 — Messaging (in-app + email):** done. Channels (ANNOUNCEMENT /
-  TEAM_CHAT — DMs not implemented, see roadmap notes), messages with read
-  receipts, and a `NotificationChannel` abstraction (real Resend send if
-  `RESEND_API_KEY` is configured, logging stub otherwise — no Resend account
-  in this sandbox). Announcing to a ministry channel emails every member.
-  Also shipped the Phase 4 `assignment.confirm`/`assignment.decline`
-  endpoints — decline triggers a bounded re-solve for that role.
-- **Phase 9 — Analytics & AI Assistant:** done. Coverage trend, reliability
-  distribution, burnout-risk flagging, and equipment-usage analytics
-  endpoints; an AI Assistant (`POST /churches/:churchId/assistant/query`)
-  answering all four PRD example questions — who hasn't served recently,
-  who can replace a named volunteer, who needs training, and predicted
-  coverage shortages — via a fixed library of safe, parameterized query
-  templates. Intent classification is keyword/regex matching, not an LLM —
-  see deviation #7 below.
-- **Next up — Phase 10:** Calendar (month/week/day/agenda views, ICS
-  export) — also where the RRULE expansion deferred since Phase 2/3
-  finally gets built.
+- **Phase 1 — Auth & RBAC foundation:** done.
+- **Phase 2 — Ministry & Volunteer Management:** done.
+- **Phase 3 — Services & Tasks:** done.
+- **Phase 4 — AI Scheduling Engine:** done. Runs synchronously in-request
+  (no Redis/BullMQ in this sandbox — deviation #3).
+- **Phase 5 — Dashboard & Live Day-Of View:** done. REST aggregation +
+  WebSocket gateway (deviation #4).
+- **Phase 6 — Equipment Management:** done. QR codes, reservations,
+  checkout/checkin, maintenance, live fault alerts.
+- **Phase 7 — Attendance & Check-in:** done. Check-in, lateness, live
+  roster, on-demand reliability recompute (deviation #5).
+- **Phase 8 — Messaging (in-app + email):** done. Channels, read receipts,
+  Resend-backed notifications (deviation #6), confirm/decline with re-solve.
+- **Phase 9 — Analytics & AI Assistant:** done. Coverage/reliability/
+  burnout/equipment analytics; assistant answers all 4 PRD example
+  questions via keyword-matched safe query templates (deviation #7).
+- **Phase 10 — Calendar:** done. ICS export (`GET
+  /churches/:churchId/calendar.ics`), month/agenda web view, and real RRULE
+  expansion (`rrule` package) closing the recurring-availability (Phase 2)
+  and recurring-service (Phase 3) deferrals — `POST
+  .../availability/recurring` and `POST
+  .../services/:serviceId/generate-recurring`.
+- **Next up — Phase 11 (final phase on the roadmap):** Hardening & Launch
+  Readiness — OWASP pass, rate limiting, load testing, Sentry/PostHog,
+  accessibility audit, Playwright E2E, and switching from
+  `sandbox-init.sql`/raw `pg` to real Prisma migrations on a machine with
+  network access.
 
-All of the above is **built and passing** — 27/27 unit tests, 32/32
+See `../ServeFlow-Docs/08-roadmap.md` for the full per-phase detail on
+what's implemented vs. deliberately simplified in each one — this file only
+tracks the running total and the environment-driven deviations below.
+
+All of the above is **built and passing** — 30/30 unit tests, 37/37
 integration tests against a real Postgres (including three genuine
 WebSocket tests with `socket.io-client`), see `apps/api/test`.
 
@@ -69,8 +45,6 @@ WebSocket tests with `socket.io-client`), see `apps/api/test`.
 
 1. **Package manager: npm workspaces**, not pnpm/Turborepo. This dev sandbox
    couldn't install pnpm globally (no write access to the global bin dir).
-   Functionally equivalent for every phase so far; revisit when setting up
-   real CI/CD on a machine where that's not a constraint.
 
 2. **Database access: raw `pg` + hand-written SQL**, not `@prisma/client`,
    at runtime. This sandbox cannot reach `binaries.prisma.sh` (Prisma's
@@ -86,47 +60,30 @@ WebSocket tests with `socket.io-client`), see `apps/api/test`.
    expose the same methods either way, so no call sites elsewhere change.
 
 3. **AI scheduling runs synchronously, not via BullMQ + Redis + WebSocket
-   progress.** No Redis is available in this sandbox (no Docker, no root to
-   install a system package). `SchedulingService.generateSchedule` runs
-   in-request and returns the complete result immediately, which is fine at
-   the scale documented in `docs/04-ai-scheduling-algorithm.md` §9 (well
-   under a second for a typical 5-15 role service). Swapping to a queued job
-   with progress streamed over WebSocket later is additive — the method
-   signature doesn't change, only what calls it.
+   progress.** No Redis is available in this sandbox. Swapping to a queued
+   job with progress streamed over WebSocket later is additive.
 
 4. **Dashboard aggregation is REST, not GraphQL**, and **the realtime
    gateway has no Redis pub/sub adapter.** Both for the same underlying
-   reason as #3 (no Redis, and standing up a whole GraphQL server for one
-   resolver isn't proportionate). The realtime gateway (`/realtime`
-   namespace, see `apps/api/src/modules/realtime`) works correctly for a
-   single running instance — it verifies church membership before letting a
-   client join a room — but only fans out to clients connected to *that*
-   process. Horizontal scaling needs `@socket.io/redis-adapter` wired in,
-   which is additive once Redis exists.
+   reason as #3. The realtime gateway (`/realtime` namespace) verifies
+   church membership before letting a client join a room, but only fans out
+   to clients connected to the single running process.
 
 5. **Reliability score recomputation is an on-demand endpoint, not a
    nightly cron job.** No scheduler/cron infrastructure exists in this
    sandbox. `POST /churches/:churchId/reliability/recompute` runs the exact
-   same `ReliabilityService.recomputeForChurch` logic a real cron trigger
-   would call — wiring it to an actual schedule (Vercel/Fly.io cron, or a
-   BullMQ repeatable job once Redis exists) is additive, not a rework.
+   logic a real cron trigger would call.
 
 6. **Email notifications are logged, not actually delivered.** No Resend
-   account exists in this sandbox to configure. `EmailNotificationChannel`
-   (see `apps/api/src/modules/notifications`) implements the real Resend API
-   call and takes the exact same code path whether or not `RESEND_API_KEY`
-   is set — without a key it logs the "would send" email and records the
-   `Notification` with `sentAt` left null, instead of throwing. Setting the
-   env var on a real deployment is the only change needed.
+   account exists in this sandbox. `EmailNotificationChannel` implements
+   the real Resend API call and takes the same code path whether or not
+   `RESEND_API_KEY` is set — without a key it logs instead of throwing.
 
 7. **The AI Assistant classifies intent with keyword/regex matching, not an
-   LLM.** No LLM API key (Anthropic/OpenAI) is configured in this sandbox.
-   `IntentClassifierService` (see `apps/api/src/modules/assistant`) maps a
-   question to one of a fixed set of safe, parameterized query templates —
-   the same safety property the architecture doc calls for (never
-   model-generated SQL) — just via pattern matching instead of an LLM
-   picking the template. Swapping in a real LLM classifier later touches
-   only this one service.
+   LLM.** No LLM API key is configured in this sandbox.
+   `IntentClassifierService` maps a question to one of a fixed set of safe,
+   parameterized query templates — the safety property the architecture doc
+   calls for — via pattern matching instead of an LLM picking the template.
 
 ## Local development (on a normal machine)
 
@@ -151,10 +108,8 @@ npm run test --workspace apps/api
 
 # Integration tests (need Postgres running — docker compose up -d, or point
 # DATABASE_URL at any local Postgres). These reset the schema using
-# packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
-# isolation, skill-based scheduling exclusion, WebSocket room membership,
-# live fault/check-in alerts, notification delivery, assistant answers on
-# an engineered dataset, etc. — not just that endpoints return 200.
+# packages/db/sandbox-init.sql and prove real behavior, not just that
+# endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api

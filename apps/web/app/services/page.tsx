@@ -34,6 +34,7 @@ export default function ServicesPage() {
     title: "Sunday Service",
     date: "",
     serviceStart: "",
+    recurrenceRule: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -71,7 +72,7 @@ export default function ServicesPage() {
       await apiFetch(`/churches/${churchId}/services`, {
         method: "POST",
         accessToken: session.accessToken,
-        body: { ...form, date: dateIso, serviceStart: startIso },
+        body: { ...form, date: dateIso, serviceStart: startIso, recurrenceRule: form.recurrenceRule || undefined },
       });
       await load();
     } catch (err) {
@@ -138,6 +139,14 @@ export default function ServicesPage() {
             required
             value={form.serviceStart}
             onChange={(e) => setForm((f) => ({ ...f, serviceStart: e.target.value }))}
+          />
+          <label className="sf-label" htmlFor="recurrenceRule">Recurrence rule (optional, e.g. FREQ=WEEKLY)</label>
+          <input
+            id="recurrenceRule"
+            className="sf-input"
+            placeholder="FREQ=WEEKLY"
+            value={form.recurrenceRule}
+            onChange={(e) => setForm((f) => ({ ...f, recurrenceRule: e.target.value }))}
           />
           <button className="sf-button" type="submit" disabled={submitting}>
             {submitting ? "Creating..." : "Create service"}
