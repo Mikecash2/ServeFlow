@@ -1,0 +1,782 @@
+// ServeFlow — Prisma schema (Foundation phase)
+// Every tenant-owned model carries churchId. Row-Level Security policies
+// mirroring these boundaries are applied via raw SQL migrations (see
+// prisma/migrations/*_rls_policies.sql) — Prisma does not manage RLS directly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Platform / Tenancy
+// ─────────────────────────────────────────────────────────────
+
+enum SubscriptionPlan {
+  TRIAL
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+}
+
+model Church {
+  id                String             @id @default(cuid())
+  name              String
+  slug              String             @unique
+  logoUrl           String?
+  primaryColor      String?
+  secondaryColor    String?
+  timezone          String             @default("UTC")
+  address           String?
+  website           String?
+  subscriptionPlan  SubscriptionPlan   @default(TRIAL)
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  stripeCustomerId  String?            // populated once billing integration is wired
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  campuses      Campus[]
+  ministries    Ministry[]
+  memberships   Membership[]
+  services      Service[]
+  equipment     Equipment[]
+  files         FileAsset[]
+  auditLogs     AuditLog[]
+  checklists    ChecklistTemplate[]
+  notifications Notification[]
+
+  @@index([slug])
+}
+
+model Campus {
+  id        String   @id @default(cuid())
+  churchId  String
+  church    Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  timezone  String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  ministries  Ministry[]
+  services    Service[]
+  equipment   Equipment[]
+
+  @@index([churchId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Identity, Membership, RBAC
+// ─────────────────────────────────────────────────────────────
+
+enum GlobalRole {
+  SYSTEM_OWNER
+  PLATFORM_ADMIN
+  NONE // regular users have NONE at the global level; scope comes from Membership
+}
+
+enum ChurchRole {
+  CHURCH_ADMIN
+  CAMPUS_ADMIN
+  MINISTRY_LEADER
+  TEAM_LEADER
+  VOLUNTEER
+  GUEST
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  phone         String?
+  firstName     String
+  lastName      String
+  photoUrl      String?
+  passwordHash  String?    // null when using OAuth-only login
+  globalRole    GlobalRole @default(NONE)
+  mfaEnabled    Boolean    @default(false)
+  mfaSecret     String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  memberships       Membership[]
+  volunteerProfile  VolunteerProfile?
+  sentMessages      Message[]          @relation("MessageSender")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  uploadedFiles     FileAsset[]
+  checkIns          CheckIn[]
+  faultReports      FaultReport[]
+
+  @@index([email])
+}
+
+// A Membership is the unit of RBAC scope: one row per (user, church, [campus], [ministry], role)
+model Membership {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  churchId   String
+  church     Church      @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  campusId   String?
+  campus     Campus?     @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  ministryId String?
+  ministry   Ministry?   @relation(fields: [ministryId], references: [id], onDelete: Cascade)
+  role       ChurchRole
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+
+  @@unique([userId, churchId, campusId, ministryId, role])
+  @@index([churchId])
+  @@index([userId])
+}
+
+// Fine-grained permission table backing PermissionGuard; seeded with sane
+// defaults per ChurchRole, but overridable per church.
+model Permission {
+  id         String     @id @default(cuid())
+  churchId   String?    // null = platform-wide default row
+  role       ChurchRole
+  resource   String     // e.g. "volunteer", "service", "equipment"
+  action     String     // e.g. "read", "write", "delete", "approve"
+  allowed    Boolean    @default(true)
+
+  @@unique([churchId, role, resource, action])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ministries / Teams
+// ─────────────────────────────────────────────────────────────
+
+enum MinistryCategory {
+  MEDIA
+  PRODUCTION
+  WORSHIP
+  HOSPITALITY
+  CHILDREN
+  SECURITY
+  USHERING
+  PRAYER
+  CLEANING
+  CUSTOM
+}
+
+model Ministry {
+  id         String           @id @default(cuid())
+  churchId   String
+  church     Church           @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  campusId   String?
+  campus     Campus?          @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  name       String
+  category   MinistryCategory
+  description String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  memberships Membership[]
+  teams       Team[]
+  serviceRoles ServiceRole[]
+
+  @@index([churchId])
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  ministryId String
+  ministry   Ministry @relation(fields: [ministryId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime @default(now())
+
+  @@index([ministryId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Volunteers
+// ─────────────────────────────────────────────────────────────
+
+enum VolunteerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model VolunteerProfile {
+  id                 String          @id @default(cuid())
+  userId             String          @unique
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  churchId           String          // primary church; a volunteer belongs to one church in v1
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  status             VolunteerStatus @default(ACTIVE)
+  reliabilityScore   Float           @default(1.0) // 0.0–1.0, computed nightly — see AI algorithm doc
+  notes              String?
+  joinedAt           DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  skills             VolunteerSkill[]
+  certifications     Certification[]
+  trainingRecords    TrainingRecord[]
+  availability       Availability[]
+  preferredRoles     PreferredRole[]
+  assignments        Assignment[]
+  attendanceRecords  Attendance[]
+  documents          FileAsset[]      @relation("VolunteerDocuments")
+
+  @@index([churchId])
+}
+
+model Skill {
+  id      String @id @default(cuid())
+  churchId String
+  name    String
+  volunteers VolunteerSkill[]
+  serviceRoles ServiceRoleSkill[]
+
+  @@unique([churchId, name])
+}
+
+model VolunteerSkill {
+  id                 String           @id @default(cuid())
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  skillId            String
+  skill              Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  experienceLevel    Int              @default(1) // 1–5
+  yearsExperience    Float?
+
+  @@unique([volunteerProfileId, skillId])
+}
+
+model Certification {
+  id                 String           @id @default(cuid())
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  name               String
+  issuedAt           DateTime?
+  expiresAt          DateTime?
+  documentUrl        String?
+
+  @@index([volunteerProfileId])
+}
+
+model TrainingRecord {
+  id                 String           @id @default(cuid())
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  courseName         String
+  completedAt        DateTime?
+  requiredForRoles   String[]         // ServiceRole names this training unlocks
+
+  @@index([volunteerProfileId])
+}
+
+model PreferredRole {
+  id                 String           @id @default(cuid())
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  serviceRoleId      String
+  serviceRole        ServiceRole      @relation(fields: [serviceRoleId], references: [id], onDelete: Cascade)
+  priority           Int              @default(1) // 1 = most preferred
+
+  @@unique([volunteerProfileId, serviceRoleId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Availability
+// ─────────────────────────────────────────────────────────────
+
+enum AvailabilityStatus {
+  AVAILABLE
+  UNAVAILABLE
+  LATE
+  LEAVE_EARLY
+  MAYBE
+}
+
+model Availability {
+  id                 String             @id @default(cuid())
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile   @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  date               DateTime           // specific date this record applies to
+  status             AvailabilityStatus
+  note               String?
+  recurrenceRule     String?            // RFC5545 RRULE if this originated from a recurring pattern
+  isHolidayMode       Boolean            @default(false)
+  submittedAt        DateTime           @default(now())
+
+  @@index([volunteerProfileId, date])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Services
+// ─────────────────────────────────────────────────────────────
+
+enum ServiceType {
+  SUNDAY_SERVICE
+  WEDNESDAY_SERVICE
+  PRAYER_MEETING
+  CONFERENCE
+  WEDDING
+  FUNERAL
+  SPECIAL_EVENT
+}
+
+model Service {
+  id                 String      @id @default(cuid())
+  churchId           String
+  church              Church      @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  campusId           String
+  campus             Campus      @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  type               ServiceType
+  title              String
+  venue              String?
+  date               DateTime
+  setupStart         DateTime?
+  soundcheck         DateTime?
+  doorsOpen          DateTime?
+  serviceStart       DateTime
+  serviceEnd         DateTime?
+  derigEnd           DateTime?
+  expectedAttendance Int?
+  notes              String?
+  guestSpeaker       String?
+  recurrenceRule     String?     // RRULE for recurring service templates
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  roles          ServiceRole[]
+  tasks          Task[]
+  scheduleRuns   ScheduleRun[]
+  attendance     Attendance[]
+  checklistInstances ChecklistInstance[]
+
+  @@index([churchId, date])
+  @@index([campusId, date])
+}
+
+// A role required for a given service, e.g. "Camera 2", "Sound Engineer"
+model ServiceRole {
+  id           String   @id @default(cuid())
+  serviceId    String
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  ministryId   String
+  ministry     Ministry @relation(fields: [ministryId], references: [id], onDelete: Cascade)
+  name         String
+  minRequired  Int      @default(1)
+  maxAllowed   Int      @default(1)
+  requiredSkills ServiceRoleSkill[]
+  preferredBy    PreferredRole[]
+  assignments    Assignment[]
+
+  @@index([serviceId])
+}
+
+model ServiceRoleSkill {
+  id            String      @id @default(cuid())
+  serviceRoleId String
+  serviceRole   ServiceRole @relation(fields: [serviceRoleId], references: [id], onDelete: Cascade)
+  skillId       String
+  skill         Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  minExperienceLevel Int    @default(1)
+
+  @@unique([serviceRoleId, skillId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI Scheduling
+// ─────────────────────────────────────────────────────────────
+
+enum ScheduleRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model ScheduleRun {
+  id          String            @id @default(cuid())
+  serviceId   String
+  service     Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  status      ScheduleRunStatus @default(PENDING)
+  triggeredById String
+  startedAt   DateTime          @default(now())
+  completedAt DateTime?
+  coveragePct Float?
+  summary     String?           // human-readable AI summary of the run
+
+  assignments Assignment[]
+
+  @@index([serviceId])
+}
+
+enum AssignmentSource {
+  AI_GENERATED
+  MANUAL_OVERRIDE
+  SELF_SIGNUP
+}
+
+model Assignment {
+  id                 String           @id @default(cuid())
+  scheduleRunId      String
+  scheduleRun        ScheduleRun      @relation(fields: [scheduleRunId], references: [id], onDelete: Cascade)
+  serviceRoleId      String
+  serviceRole        ServiceRole      @relation(fields: [serviceRoleId], references: [id], onDelete: Cascade)
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  source             AssignmentSource @default(AI_GENERATED)
+  score              Float            // final weighted score that won this assignment
+  reasoning          Json             // structured factor breakdown — see 04-ai-scheduling-algorithm.md
+  confirmedAt        DateTime?
+  declinedAt         DateTime?
+  createdAt          DateTime         @default(now())
+
+  @@index([scheduleRunId])
+  @@index([volunteerProfileId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tasks (setup / service / de-rig)
+// ─────────────────────────────────────────────────────────────
+
+enum TaskPhase {
+  SETUP
+  SERVICE
+  DERIG
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  serviceId          String
+  service            Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  phase              TaskPhase
+  title              String
+  description        String?
+  priority           Int        @default(3) // 1 highest
+  estimatedMinutes   Int?
+  status             TaskStatus @default(NOT_STARTED)
+  assignedVolunteerId String?
+  dependsOnTaskId    String?
+  dependsOn          Task?      @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
+  dependents         Task[]     @relation("TaskDependency")
+  startedAt          DateTime?
+  completedAt        DateTime?
+  photoUrls          String[]
+  createdAt          DateTime   @default(now())
+
+  @@index([serviceId, phase])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Checklists
+// ─────────────────────────────────────────────────────────────
+
+enum ChecklistKind {
+  SETUP
+  SERVICE
+  EMERGENCY
+  SHUTDOWN
+  DERIG
+}
+
+model ChecklistTemplate {
+  id        String        @id @default(cuid())
+  churchId  String
+  church    Church        @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  kind      ChecklistKind
+  name      String
+  items     ChecklistTemplateItem[]
+  instances ChecklistInstance[]
+  createdAt DateTime      @default(now())
+
+  @@index([churchId])
+}
+
+model ChecklistTemplateItem {
+  id          String            @id @default(cuid())
+  templateId  String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  label       String
+  sortOrder   Int               @default(0)
+  isRequired  Boolean           @default(true)
+}
+
+model ChecklistInstance {
+  id         String            @id @default(cuid())
+  templateId String
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  completedItems Json          @default("{}") // map of templateItemId -> { completedBy, completedAt, note, photoUrl }
+  createdAt  DateTime          @default(now())
+
+  @@index([serviceId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Equipment
+// ─────────────────────────────────────────────────────────────
+
+enum EquipmentStatus {
+  AVAILABLE
+  IN_USE
+  UNDER_MAINTENANCE
+  RETIRED
+}
+
+model Equipment {
+  id               String          @id @default(cuid())
+  churchId         String
+  church           Church          @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  campusId         String?
+  campus           Campus?         @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  name             String
+  category         String
+  qrCode           String?         @unique
+  barcode          String?         @unique
+  status           EquipmentStatus @default(AVAILABLE)
+  storageLocation  String?
+  batteryLevelPct  Int?
+  warrantyExpiresAt DateTime?
+  assignedVolunteerId String?
+  purchasedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  maintenanceRecords MaintenanceRecord[]
+  reservations       EquipmentReservation[]
+  faultReports       FaultReport[]
+
+  @@index([churchId])
+  @@index([qrCode])
+}
+
+model MaintenanceRecord {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  performedAt DateTime
+  description String
+  cost        Float?
+  performedBy String?
+
+  @@index([equipmentId])
+}
+
+model EquipmentReservation {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  serviceId   String?
+  reservedFrom DateTime
+  reservedTo   DateTime
+  checkedOutAt DateTime?
+  checkedInAt  DateTime?
+
+  @@index([equipmentId])
+}
+
+enum FaultSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model FaultReport {
+  id          String        @id @default(cuid())
+  equipmentId String
+  equipment   Equipment     @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  reportedById String
+  reportedBy   User         @relation(fields: [reportedById], references: [id])
+  severity    FaultSeverity
+  description String
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([equipmentId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Attendance
+// ─────────────────────────────────────────────────────────────
+
+model Attendance {
+  id                 String           @id @default(cuid())
+  serviceId          String
+  service            Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  volunteerProfileId String
+  volunteerProfile   VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  expectedAt         DateTime?
+  checkIn            CheckIn?
+
+  @@unique([serviceId, volunteerProfileId])
+}
+
+enum CheckInMethod {
+  QR_CODE
+  MANUAL
+  GPS
+}
+
+model CheckIn {
+  id            String        @id @default(cuid())
+  attendanceId  String        @unique
+  attendance    Attendance    @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  method        CheckInMethod
+  checkedInAt   DateTime      @default(now())
+  isLate        Boolean       @default(false)
+  gpsLat        Float?
+  gpsLng        Float?
+}
+
+// ─────────────────────────────────────────────────────────────
+// Messaging
+// ─────────────────────────────────────────────────────────────
+
+enum MessageChannelType {
+  ANNOUNCEMENT
+  TEAM_CHAT
+  DIRECT
+}
+
+model MessageChannel {
+  id        String             @id @default(cuid())
+  churchId  String
+  type      MessageChannelType
+  ministryId String?
+  name      String?
+  createdAt DateTime           @default(now())
+
+  messages Message[]
+
+  @@index([churchId])
+}
+
+model Message {
+  id          String         @id @default(cuid())
+  channelId   String
+  channel     MessageChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User           @relation("MessageSender", fields: [senderId], references: [id])
+  body        String
+  mentionUserIds String[]
+  attachmentUrls String[]
+  createdAt   DateTime       @default(now())
+
+  readReceipts MessageReadReceipt[]
+
+  @@index([channelId])
+}
+
+model MessageReadReceipt {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Files
+// ─────────────────────────────────────────────────────────────
+
+enum FileCategory {
+  TRAINING_GUIDE
+  POLICY
+  EQUIPMENT_MANUAL
+  MEDIA
+  VOLUNTEER_DOCUMENT
+  OTHER
+}
+
+model FileAsset {
+  id                 String       @id @default(cuid())
+  churchId           String
+  church             Church       @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  uploadedById       String
+  uploadedBy         User         @relation(fields: [uploadedById], references: [id])
+  category           FileCategory
+  fileName           String
+  storageUrl         String
+  mimeType           String
+  sizeBytes          Int
+  volunteerProfileId String?      // set when category = VOLUNTEER_DOCUMENT
+  volunteerProfile   VolunteerProfile? @relation("VolunteerDocuments", fields: [volunteerProfileId], references: [id])
+  createdAt          DateTime     @default(now())
+
+  @@index([churchId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────
+
+enum NotificationChannelType {
+  PUSH
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+model Notification {
+  id        String                  @id @default(cuid())
+  churchId  String
+  church    Church                  @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                    @relation(fields: [userId], references: [id])
+  channel   NotificationChannelType
+  title     String
+  body      String
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime                @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Audit Log (append-only; no update/delete DB grants for app role)
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  churchId   String
+  church     Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String   // e.g. "volunteer.update", "assignment.override"
+  resourceType String
+  resourceId String
+  beforeJson Json?
+  afterJson  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([churchId, createdAt])
+  @@index([resourceType, resourceId])
+}

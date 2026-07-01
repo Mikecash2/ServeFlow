@@ -1,0 +1,75 @@
+:root {
+  --sf-bg: #ffffff;
+  --sf-surface: #f7f7f8;
+  --sf-surface-raised: #ffffff;
+  --sf-border: #e5e5e8;
+  --sf-text-primary: #101012;
+  --sf-text-secondary: #6b6b70;
+  --sf-brand-600: #4f46e5;
+  --sf-brand-500: #6366f1;
+  --sf-brand-100: #e0e1fc;
+  --sf-danger-500: #dc2626;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--sf-surface);
+  color: var(--sf-text-primary);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.sf-card {
+  background: var(--sf-surface-raised);
+  border: 1px solid var(--sf-border);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 1px 2px rgba(16, 16, 18, 0.04);
+}
+
+.sf-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.sf-button {
+  background: var(--sf-brand-600);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.sf-button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.sf-error {
+  color: var(--sf-danger-500);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.sf-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sf-auth-card { width: 380px; }
+
+.sf-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sf-text-secondary);
+  margin-bottom: 4px;
+  display: block;
+}
