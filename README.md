@@ -24,10 +24,18 @@ architecture, API spec, AI scheduling design, and roadmap.
   fill, explainability endpoint, manual override. Runs synchronously
   in-request rather than as a queued job with WebSocket progress (no
   Redis/BullMQ in this sandbox — see deviation #3 below).
-- **Next up — Phase 5:** Dashboard & Live Day-Of View.
+- **Phase 5 — Dashboard & Live Day-Of View:** done. `GET
+  /churches/:churchId/dashboard` aggregates coverage %, availability %,
+  setup/de-rig progress, missing volunteers, and AI recommendations in one
+  call; a WebSocket gateway (`/realtime` namespace) broadcasts task-status
+  updates to clients with verified church membership, shown live on the
+  service detail page. Attendance/check-in live updates are out of scope
+  until Phase 7 builds Attendance itself.
+- **Next up — Phase 6:** Equipment Management.
 
-All of the above is **built and passing** — 29/29 tests (15 unit, 14
-integration against a real Postgres), see `apps/api/test`.
+All of the above is **built and passing** — 31/31 tests (15 unit, 16
+integration against a real Postgres, including a genuine WebSocket test with
+`socket.io-client`), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (all environment-driven, all documented at the call site too)
 
@@ -58,6 +66,16 @@ integration against a real Postgres), see `apps/api/test`.
    with progress streamed over WebSocket later is additive — the method
    signature doesn't change, only what calls it.
 
+4. **Dashboard aggregation is REST, not GraphQL**, and **the realtime
+   gateway has no Redis pub/sub adapter.** Both for the same underlying
+   reason as #3 (no Redis, and standing up a whole GraphQL server for one
+   resolver isn't proportionate). The realtime gateway (`/realtime`
+   namespace, see `apps/api/src/modules/realtime`) works correctly for a
+   single running instance — it verifies church membership before letting a
+   client join a room — but only fans out to clients connected to *that*
+   process. Horizontal scaling needs `@socket.io/redis-adapter` wired in,
+   which is additive once Redis exists.
+
 ## Local development (on a normal machine)
 
 ```bash
@@ -82,8 +100,8 @@ npm run test --workspace apps/api
 # Integration tests (need Postgres running — docker compose up -d, or point
 # DATABASE_URL at any local Postgres). These reset the schema using
 # packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
-# isolation, skill-based scheduling exclusion, etc. — not just that
-# endpoints return 200.
+# isolation, skill-based scheduling exclusion, WebSocket room membership,
+# etc. — not just that endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api

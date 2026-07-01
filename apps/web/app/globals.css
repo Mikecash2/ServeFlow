@@ -73,3 +73,58 @@ body {
   margin-bottom: 4px;
   display: block;
 }
+
+:root {
+  --sf-success-500: #16a34a;
+  --sf-warning-500: #d97706;
+  --sf-info-500: #0284c7;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--sf-text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--sf-border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--sf-brand-500);
+}
+
+.sf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.badge-ok { background: #dcfce7; color: var(--sf-success-500); }
+.badge-warn { background: #fef3c7; color: var(--sf-warning-500); }
+.badge-gap { background: #fee2e2; color: var(--sf-danger-500); }
+
+.ai-card {
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.06), rgba(2, 132, 199, 0.02));
+  border: 1px solid rgba(2, 132, 199, 0.25);
+}

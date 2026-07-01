@@ -3,6 +3,7 @@ import { PermissionGuard } from "../rbac/permission.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { TasksRepository, TaskPhase } from "./tasks.repository";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { ServicesRepository } from "../services/services.repository";
 import { createTaskSchema, CreateTaskDto } from "./dto/create-task.dto";
 import { updateTaskStatusSchema, UpdateTaskStatusDto } from "./dto/update-task-status.dto";
@@ -14,6 +15,7 @@ export class TasksController {
   constructor(
     private readonly tasks: TasksRepository,
     private readonly services: ServicesRepository,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   private async assertServiceExists(churchId: string, serviceId: string) {
@@ -65,7 +67,9 @@ export class TasksController {
     @Body(new ZodValidationPipe(updateTaskStatusSchema)) dto: UpdateTaskStatusDto,
   ) {
     await this.assertTaskExists(churchId, serviceId, taskId);
-    return this.tasks.updateStatus(churchId, taskId, dto.status, dto.assignedVolunteerId);
+    const updated = await this.tasks.updateStatus(churchId, taskId, dto.status, dto.assignedVolunteerId);
+    this.realtime.emitTaskUpdated(churchId, updated);
+    return updated;
   }
 
   @Post(":taskId/photos")

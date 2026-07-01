@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch } from "../../../lib/api-client";
+import { connectRealtime } from "../../../lib/realtime";
 
 interface ServiceDetail {
   id: string;
@@ -82,6 +83,7 @@ export default function ServiceDetailPage() {
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveConnected, setLiveConnected] = useState(false);
 
   const churchId = session?.user.memberships[0]?.churchId;
 
@@ -112,6 +114,20 @@ export default function ServiceDetailPage() {
     load().catch((err) => setError(err instanceof Error ? err.message : "Failed to load service"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, serviceId]);
+
+  useEffect(() => {
+    if (!session || !churchId) return;
+    const socket = connectRealtime(session.accessToken, churchId);
+    socket.on("connect", () => setLiveConnected(true));
+    socket.on("disconnect", () => setLiveConnected(false));
+    socket.on("task.updated", (updated: Task) => {
+      setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+    });
+    return () => {
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, churchId]);
 
   async function addRole(e: FormEvent) {
     e.preventDefault();
@@ -281,7 +297,12 @@ export default function ServiceDetailPage() {
       </div>
 
       <div className="sf-card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Tasks</h3>
+        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          Tasks
+          <span style={{ fontSize: 11, fontWeight: 600, color: liveConnected ? "var(--sf-success-500)" : "var(--sf-text-secondary)" }}>
+            {liveConnected ? "\u25CF live" : "\u25CB connecting..."}
+          </span>
+        </h3>
         {PHASES.map((phase) => (
           <div key={phase} style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sf-text-secondary)", textTransform: "uppercase" }}>

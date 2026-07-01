@@ -5,6 +5,7 @@ import { ScheduleRunsRepository, AssignmentRecord } from "./schedule-runs.reposi
 import { ServiceRolesRepository } from "../service-roles/service-roles.repository";
 import { ServicesRepository } from "../services/services.repository";
 import { AssignmentReasoning } from "./scheduling.types";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 
 export interface GenerateScheduleResult {
   runId: string;
@@ -21,6 +22,7 @@ export class SchedulingService {
     private readonly scheduleRuns: ScheduleRunsRepository,
     private readonly serviceRoles: ServiceRolesRepository,
     private readonly services: ServicesRepository,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   /**
@@ -124,6 +126,7 @@ export class SchedulingService {
         : `${totalFilled}/${totalRequired} required slots filled. Coverage gap(s): ${gaps.join(", ")}.`;
 
     await this.scheduleRuns.completeRun(churchId, run.id, coveragePct, summary);
+    this.realtime.emitCoverageChanged(churchId, { serviceId, runId: run.id, coveragePct, summary });
 
     return { runId: run.id, coveragePct, summary, assignments };
   }
