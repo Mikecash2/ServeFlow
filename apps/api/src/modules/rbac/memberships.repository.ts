@@ -122,4 +122,28 @@ export class MembershipsRepository {
       return rows.map((r) => r.id);
     });
   }
+
+  /** Every distinct user (any role) with an active membership in a ministry — used for @channel-style announcements. */
+  async listUserIdsForMinistry(churchId: string, ministryId: string): Promise<string[]> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query<{ user_id: string }>(
+        `select distinct user_id from memberships
+         where church_id = $1 and ministry_id = $2 and is_active = true`,
+        [churchId, ministryId],
+      );
+      return rows.map((r) => r.user_id);
+    });
+  }
+
+  /** Ministry ids the user has any active membership in, for this church. */
+  async listMinistryIdsForUser(churchId: string, userId: string): Promise<string[]> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query<{ ministry_id: string }>(
+        `select distinct ministry_id from memberships
+         where church_id = $1 and user_id = $2 and ministry_id is not null and is_active = true`,
+        [churchId, userId],
+      );
+      return rows.map((r) => r.ministry_id);
+    });
+  }
 }

@@ -7,9 +7,10 @@ import { ScheduleRunsRepository } from "./schedule-runs.repository";
 import { ServiceRolesModule } from "../service-roles/service-roles.module";
 import { ServicesModule } from "../services/services.module";
 import { VolunteersModule } from "../volunteers/volunteers.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
-  imports: [ServiceRolesModule, ServicesModule, VolunteersModule],
+  imports: [ServiceRolesModule, ServicesModule, VolunteersModule, NotificationsModule],
   controllers: [SchedulingController],
   providers: [SchedulingService, ScoringService, CandidatesRepository, ScheduleRunsRepository],
 })

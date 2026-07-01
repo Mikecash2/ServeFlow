@@ -70,6 +70,28 @@ export class SchedulingController {
     return { assignment, explanation: sentence };
   }
 
+  @Post("assignments/:assignmentId/confirm")
+  @RequirePermission({ resource: "service", action: "read" })
+  async confirm(@Param("churchId") churchId: string, @Param("assignmentId") assignmentId: string) {
+    const assignment = await this.scheduleRuns.findAssignmentById(churchId, assignmentId);
+    if (!assignment) {
+      throw new NotFoundException({ error: { code: "NOT_FOUND", message: "Assignment not found" } });
+    }
+    const confirmed = await this.scheduleRuns.confirmAssignment(churchId, assignmentId);
+    return confirmed;
+  }
+
+  @Post("assignments/:assignmentId/decline")
+  @RequirePermission({ resource: "service", action: "read" })
+  async decline(@Param("churchId") churchId: string, @Param("assignmentId") assignmentId: string) {
+    const assignment = await this.scheduleRuns.findAssignmentById(churchId, assignmentId);
+    if (!assignment) {
+      throw new NotFoundException({ error: { code: "NOT_FOUND", message: "Assignment not found" } });
+    }
+    const replacement = await this.scheduling.handleDecline(churchId, assignmentId);
+    return { declined: true, replacement };
+  }
+
   @Post("assignments/:assignmentId/override")
   @RequirePermission({ resource: "service", action: "write" })
   async override(

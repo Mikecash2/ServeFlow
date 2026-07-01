@@ -141,6 +141,28 @@ export class ScheduleRunsRepository {
     });
   }
 
+  async confirmAssignment(churchId: string, assignmentId: string): Promise<AssignmentRecord | null> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query(
+        `update assignments set confirmed_at = now() where id = $1
+         returning id, schedule_run_id, service_role_id, volunteer_profile_id, source, score, reasoning, confirmed_at, declined_at`,
+        [assignmentId],
+      );
+      return rows[0] ? toAssignmentRecord(rows[0]) : null;
+    });
+  }
+
+  async declineAssignment(churchId: string, assignmentId: string): Promise<AssignmentRecord | null> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query(
+        `update assignments set declined_at = now() where id = $1
+         returning id, schedule_run_id, service_role_id, volunteer_profile_id, source, score, reasoning, confirmed_at, declined_at`,
+        [assignmentId],
+      );
+      return rows[0] ? toAssignmentRecord(rows[0]) : null;
+    });
+  }
+
   async overrideAssignment(
     churchId: string,
     assignmentId: string,

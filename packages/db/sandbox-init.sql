@@ -729,3 +729,95 @@ insert into permissions (role, resource, action, allowed, church_id) values
   ('TEAM_LEADER', 'attendance', 'write', true, null),
   ('VOLUNTEER', 'attendance', 'read', true, null),
   ('VOLUNTEER', 'attendance', 'write', true, null);
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 8: Messaging (sandbox bootstrap)
+-- Same caveat as above: hand-written to unblock this network-restricted
+-- sandbox. schema.prisma is still authoritative.
+-- ─────────────────────────────────────────────────────────────
+
+create type message_channel_type as enum ('ANNOUNCEMENT', 'TEAM_CHAT', 'DIRECT');
+create type notification_channel_type as enum ('PUSH', 'EMAIL', 'SMS', 'WHATSAPP', 'IN_APP');
+
+create table message_channels (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  type message_channel_type not null,
+  ministry_id text references ministries(id) on delete cascade,
+  name text,
+  created_at timestamptz not null default now()
+);
+create index on message_channels(church_id);
+
+create table messages (
+  id text primary key default gen_random_uuid()::text,
+  channel_id text not null references message_channels(id) on delete cascade,
+  sender_id text not null references users(id),
+  body text not null,
+  mention_user_ids text[] not null default '{}',
+  attachment_urls text[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+create index on messages(channel_id);
+
+create table message_read_receipts (
+  id text primary key default gen_random_uuid()::text,
+  message_id text not null references messages(id) on delete cascade,
+  user_id text not null references users(id),
+  read_at timestamptz not null default now(),
+  unique (message_id, user_id)
+);
+
+create table notifications (
+  id text primary key default gen_random_uuid()::text,
+  church_id text not null references churches(id) on delete cascade,
+  user_id text not null references users(id),
+  channel notification_channel_type not null,
+  title text not null,
+  body text not null,
+  read_at timestamptz,
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index on notifications(church_id);
+create index on notifications(user_id);
+
+alter table message_channels enable row level security;
+alter table messages enable row level security;
+alter table message_read_receipts enable row level security;
+alter table notifications enable row level security;
+
+create policy tenant_isolation_message_channels on message_channels
+  using (church_id = current_setting('app.current_church_id', true));
+
+create policy tenant_isolation_messages on messages
+  using (channel_id in (
+    select id from message_channels where church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_message_read_receipts on message_read_receipts
+  using (message_id in (
+    select m.id from messages m
+    join message_channels mc on mc.id = m.channel_id
+    where mc.church_id = current_setting('app.current_church_id', true)
+  ));
+
+create policy tenant_isolation_notifications on notifications
+  using (church_id = current_setting('app.current_church_id', true));
+
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'message', 'read', true, null),
+  ('CHURCH_ADMIN', 'message', 'write', true, null),
+  ('CAMPUS_ADMIN', 'message', 'read', true, null),
+  ('CAMPUS_ADMIN', 'message', 'write', true, null),
+  ('MINISTRY_LEADER', 'message', 'read', true, null),
+  ('MINISTRY_LEADER', 'message', 'write', true, null),
+  ('TEAM_LEADER', 'message', 'read', true, null),
+  ('TEAM_LEADER', 'message', 'write', true, null),
+  ('VOLUNTEER', 'message', 'read', true, null),
+  ('VOLUNTEER', 'message', 'write', true, null),
+  ('CHURCH_ADMIN', 'notification', 'read', true, null),
+  ('CAMPUS_ADMIN', 'notification', 'read', true, null),
+  ('MINISTRY_LEADER', 'notification', 'read', true, null),
+  ('TEAM_LEADER', 'notification', 'read', true, null),
+  ('VOLUNTEER', 'notification', 'read', true, null);

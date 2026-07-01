@@ -42,9 +42,16 @@ architecture, API spec, AI scheduling design, and roadmap.
   feeds real attendance history back into the Phase 4 scheduler's
   `reliability` scoring factor. Runs on-demand rather than as a nightly cron
   job — see deviation #5 below.
-- **Next up — Phase 8:** Messaging (in-app + email).
+- **Phase 8 — Messaging (in-app + email):** done. Channels (ANNOUNCEMENT /
+  TEAM_CHAT — DMs not implemented, see roadmap notes), messages with read
+  receipts, and a `NotificationChannel` abstraction (real Resend send if
+  `RESEND_API_KEY` is configured, logging stub otherwise — no Resend account
+  in this sandbox). Announcing to a ministry channel emails every member.
+  Also shipped the Phase 4 `assignment.confirm`/`assignment.decline`
+  endpoints — decline triggers a bounded re-solve for that role.
+- **Next up — Phase 9:** Analytics & AI Assistant.
 
-All of the above is **built and passing** — 40/40 tests (19 unit, 21
+All of the above is **built and passing** — 45/45 tests (21 unit, 24
 integration against a real Postgres, including three genuine WebSocket tests
 with `socket.io-client`), see `apps/api/test`.
 
@@ -94,6 +101,14 @@ with `socket.io-client`), see `apps/api/test`.
    would call — wiring it to an actual schedule (Vercel/Fly.io cron, or a
    BullMQ repeatable job once Redis exists) is additive, not a rework.
 
+6. **Email notifications are logged, not actually delivered.** No Resend
+   account exists in this sandbox to configure. `EmailNotificationChannel`
+   (see `apps/api/src/modules/notifications`) implements the real Resend API
+   call and takes the exact same code path whether or not `RESEND_API_KEY`
+   is set — without a key it logs the "would send" email and records the
+   `Notification` with `sentAt` left null, instead of throwing. Setting the
+   env var on a real deployment is the only change needed.
+
 ## Local development (on a normal machine)
 
 ```bash
@@ -119,7 +134,8 @@ npm run test --workspace apps/api
 # DATABASE_URL at any local Postgres). These reset the schema using
 # packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
 # isolation, skill-based scheduling exclusion, WebSocket room membership,
-# live fault/check-in alerts, etc. — not just that endpoints return 200.
+# live fault/check-in alerts, notification delivery pipeline, etc. — not
+# just that endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api

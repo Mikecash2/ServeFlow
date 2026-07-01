@@ -248,6 +248,39 @@ export default function ServiceDetailPage() {
     }
   }
 
+  async function confirmAssignment(assignmentId: string) {
+    if (!session || !churchId) return;
+    try {
+      await apiFetch(`/churches/${churchId}/assignments/${assignmentId}/confirm`, { method: "POST", accessToken: session.accessToken });
+      await refreshAssignments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to confirm assignment");
+    }
+  }
+
+  async function declineAssignment(assignmentId: string) {
+    if (!session || !churchId) return;
+    try {
+      await apiFetch(`/churches/${churchId}/assignments/${assignmentId}/decline`, { method: "POST", accessToken: session.accessToken });
+      await refreshAssignments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to decline assignment");
+    }
+  }
+
+  async function refreshAssignments() {
+    if (!session || !churchId || !schedule) return;
+    try {
+      const assignments = await apiFetch<Assignment[]>(
+        `/churches/${churchId}/services/${serviceId}/schedule-runs/${schedule.runId}/assignments`,
+        { accessToken: session.accessToken },
+      );
+      setSchedule((s) => (s ? { ...s, assignments } : s));
+    } catch {
+      // Non-fatal — the confirm/decline action itself already succeeded.
+    }
+  }
+
   if (loading || !session || !service) return <div className="sf-auth-shell">Loading...</div>;
 
   return (
@@ -303,17 +336,25 @@ export default function ServiceDetailPage() {
               const role = roles.find((r) => r.id === a.serviceRoleId);
               return (
                 <div key={a.id} style={{ padding: "8px 0", borderTop: "1px solid var(--sf-border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 14 }}>
                       {role?.name ?? a.serviceRoleId} — score {(a.score * 100).toFixed(0)}% ({a.source})
                     </span>
-                    <button
-                      className="sf-button"
-                      style={{ width: "auto", fontSize: 12, padding: "4px 10px" }}
-                      onClick={() => showWhy(a.id)}
-                    >
-                      Why?
-                    </button>
+                    <span style={{ display: "flex", gap: 4 }}>
+                      <button className="sf-button" style={{ width: "auto", fontSize: 12, padding: "4px 10px" }} onClick={() => showWhy(a.id)}>
+                        Why?
+                      </button>
+                      <button className="sf-button" style={{ width: "auto", fontSize: 12, padding: "4px 10px" }} onClick={() => confirmAssignment(a.id)}>
+                        Confirm
+                      </button>
+                      <button
+                        className="sf-button"
+                        style={{ width: "auto", fontSize: 12, padding: "4px 10px", background: "var(--sf-danger-500)" }}
+                        onClick={() => declineAssignment(a.id)}
+                      >
+                        Decline
+                      </button>
+                    </span>
                   </div>
                   {explanations[a.id] && (
                     <p style={{ fontSize: 13, color: "var(--sf-text-secondary)", marginTop: 6 }}>{explanations[a.id]}</p>

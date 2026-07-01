@@ -22,6 +22,10 @@ import { JwtAuthGuard } from "./jwt-auth.guard";
     // per-route on top of this for authorization, not authentication.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
-  exports: [AuthService],
+  // UsersRepository is exported alongside AuthService because
+  // NotificationsService (Phase 8) needs to resolve a user's email to
+  // deliver a notification — it has no other reason to depend on the rest
+  // of the auth module's internals (token issuance, password hashing).
+  exports: [AuthService, UsersRepository],
 })
 export class AuthModule {}

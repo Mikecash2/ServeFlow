@@ -74,6 +74,19 @@ export class ServiceRolesRepository {
     });
   }
 
+  /** Looks up a role without already knowing its serviceId — used by the
+   * decline/re-solve flow, which only has a serviceRoleId from an Assignment. */
+  async findByRoleId(churchId: string, roleId: string): Promise<ServiceRoleRecord | null> {
+    return this.tenantDb.runInTenantContext(churchId, async (query) => {
+      const rows = await query<ServiceRoleRow>(
+        `select id, service_id, ministry_id, name, min_required, max_allowed
+         from service_roles where id = $1`,
+        [roleId],
+      );
+      return rows[0] ? toRecord(rows[0]) : null;
+    });
+  }
+
   async update(
     churchId: string,
     roleId: string,

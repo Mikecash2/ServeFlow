@@ -6,6 +6,8 @@ import { ServiceRolesRepository } from "../service-roles/service-roles.repositor
 import { ServicesRepository } from "../services/services.repository";
 import { AssignmentReasoning } from "./scheduling.types";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { NotificationsService } from "../notifications/notifications.service";
+import { VolunteersRepository } from "../volunteers/volunteers.repository";
 
 export interface GenerateScheduleResult {
   runId: string;
@@ -23,6 +25,8 @@ export class SchedulingService {
     private readonly serviceRoles: ServiceRolesRepository,
     private readonly services: ServicesRepository,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
+    private readonly volunteers: VolunteersRepository,
   ) {}
 
   /**
@@ -147,5 +151,79 @@ export class SchedulingService {
       : "";
 
     return `${volunteerFirstName} was assigned because they ${reasonText} (score ${(reasoning.finalScore * 100).toFixed(0)}%, out of ${reasoning.candidatesConsidered} eligible candidate(s)).${runnerUpText}`;
+  }
+
+  /**
+   * docs/03-api-spec.md AI Scheduling section: "a decline triggers automatic
+   * re-solve for that role." Bounded, not a full restart (docs/04-ai-scheduling-algorithm.md
+   * §5 step 5) — only the vacated role is re-solved, excluding volunteers
+   * already placed elsewhere in this run and the volunteer who just declined.
+   * Returns the new assignment if a replacement was found, or null if the
+   * role is now a coverage gap (visible on the Phase 5 dashboard).
+   */
+  async handleDecline(churchId: string, assignmentId: string) {
+    const declined = await this.scheduleRuns.declineAssignment(churchId, assignmentId);
+    if (!declined) return null;
+
+    const role = await this.serviceRoles.findByRoleId(churchId, declined.serviceRoleId);
+    if (!role) return null;
+
+    const service = await this.services.findById(churchId, role.serviceId);
+    if (!service) return null;
+
+    const existingAssignments = await this.scheduleRuns.listAssignmentsForRun(churchId, declined.scheduleRunId);
+    const takenVolunteerIds = existingAssignments
+      .filter((a) => a.declinedAt === null && a.id !== declined.id)
+      .map((a) => a.volunteerProfileId);
+    takenVolunteerIds.push(declined.volunteerProfileId);
+
+    const candidates = await this.candidates.resolveCandidates(churchId, role.id, takenVolunteerIds);
+    if (candidates.length === 0) return null;
+
+    const scored = await this.scoring.scoreCandidates({
+      churchId,
+      serviceRoleId: role.id,
+      roleName: role.name,
+      serviceDate: service.date,
+      candidates,
+    });
+    scored.sort((a, b) => b.finalScore - a.finalScore);
+    const winner = scored[0];
+
+    const reasoning: AssignmentReasoning = {
+      candidatesConsidered: scored.length,
+      hardConstraintsPassed: ["active_status", "ministry_membership", "available", "no_double_booking", "required_skills"],
+      factorBreakdown: winner.factors,
+      finalScore: winner.finalScore,
+      runnerUp: null,
+    };
+
+    const newAssignment = await this.scheduleRuns.createAssignment({
+      churchId,
+      scheduleRunId: declined.scheduleRunId,
+      serviceRoleId: role.id,
+      volunteerProfileId: winner.volunteerProfileId,
+      source: "AI_GENERATED",
+      score: winner.finalScore,
+      reasoning,
+    });
+
+    const newVolunteer = await this.volunteers.findById(churchId, winner.volunteerProfileId);
+    if (newVolunteer) {
+      await this.notifications.notifyByEmail({
+        churchId,
+        userId: newVolunteer.userId,
+        title: `You've been assigned: ${role.name}`,
+        body: `You're now scheduled for "${service.title}" as ${role.name}, filling in after another volunteer declined.`,
+      });
+    }
+
+    this.realtime.emitCoverageChanged(churchId, {
+      serviceId: role.serviceId,
+      scheduleRunId: declined.scheduleRunId,
+      reassignedRole: role.name,
+    });
+
+    return newAssignment;
   }
 }
