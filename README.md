@@ -49,11 +49,21 @@ architecture, API spec, AI scheduling design, and roadmap.
   in this sandbox). Announcing to a ministry channel emails every member.
   Also shipped the Phase 4 `assignment.confirm`/`assignment.decline`
   endpoints — decline triggers a bounded re-solve for that role.
-- **Next up — Phase 9:** Analytics & AI Assistant.
+- **Phase 9 — Analytics & AI Assistant:** done. Coverage trend, reliability
+  distribution, burnout-risk flagging, and equipment-usage analytics
+  endpoints; an AI Assistant (`POST /churches/:churchId/assistant/query`)
+  answering all four PRD example questions — who hasn't served recently,
+  who can replace a named volunteer, who needs training, and predicted
+  coverage shortages — via a fixed library of safe, parameterized query
+  templates. Intent classification is keyword/regex matching, not an LLM —
+  see deviation #7 below.
+- **Next up — Phase 10:** Calendar (month/week/day/agenda views, ICS
+  export) — also where the RRULE expansion deferred since Phase 2/3
+  finally gets built.
 
-All of the above is **built and passing** — 45/45 tests (21 unit, 24
-integration against a real Postgres, including three genuine WebSocket tests
-with `socket.io-client`), see `apps/api/test`.
+All of the above is **built and passing** — 27/27 unit tests, 32/32
+integration tests against a real Postgres (including three genuine
+WebSocket tests with `socket.io-client`), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (all environment-driven, all documented at the call site too)
 
@@ -109,6 +119,15 @@ with `socket.io-client`), see `apps/api/test`.
    `Notification` with `sentAt` left null, instead of throwing. Setting the
    env var on a real deployment is the only change needed.
 
+7. **The AI Assistant classifies intent with keyword/regex matching, not an
+   LLM.** No LLM API key (Anthropic/OpenAI) is configured in this sandbox.
+   `IntentClassifierService` (see `apps/api/src/modules/assistant`) maps a
+   question to one of a fixed set of safe, parameterized query templates —
+   the same safety property the architecture doc calls for (never
+   model-generated SQL) — just via pattern matching instead of an LLM
+   picking the template. Swapping in a real LLM classifier later touches
+   only this one service.
+
 ## Local development (on a normal machine)
 
 ```bash
@@ -134,8 +153,8 @@ npm run test --workspace apps/api
 # DATABASE_URL at any local Postgres). These reset the schema using
 # packages/db/sandbox-init.sql and prove real behavior — cross-tenant RLS
 # isolation, skill-based scheduling exclusion, WebSocket room membership,
-# live fault/check-in alerts, notification delivery pipeline, etc. — not
-# just that endpoints return 200.
+# live fault/check-in alerts, notification delivery, assistant answers on
+# an engineered dataset, etc. — not just that endpoints return 200.
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api

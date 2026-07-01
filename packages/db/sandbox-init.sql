@@ -821,3 +821,15 @@ insert into permissions (role, resource, action, allowed, church_id) values
   ('MINISTRY_LEADER', 'notification', 'read', true, null),
   ('TEAM_LEADER', 'notification', 'read', true, null),
   ('VOLUNTEER', 'notification', 'read', true, null);
+
+-- ─────────────────────────────────────────────────────────────
+-- Phase 9: Analytics & AI Assistant — no new tables, read-only over
+-- existing data. Just new permission entries.
+-- ─────────────────────────────────────────────────────────────
+insert into permissions (role, resource, action, allowed, church_id) values
+  ('CHURCH_ADMIN', 'analytics', 'read', true, null),
+  ('CAMPUS_ADMIN', 'analytics', 'read', true, null),
+  ('MINISTRY_LEADER', 'analytics', 'read', true, null),
+  ('CHURCH_ADMIN', 'assistant', 'read', true, null),
+  ('CAMPUS_ADMIN', 'assistant', 'read', true, null),
+  ('MINISTRY_LEADER', 'assistant', 'read', true, null);

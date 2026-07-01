@@ -13,5 +13,6 @@ import { NotificationsModule } from "../notifications/notifications.module";
   imports: [ServiceRolesModule, ServicesModule, VolunteersModule, NotificationsModule],
   controllers: [SchedulingController],
   providers: [SchedulingService, ScoringService, CandidatesRepository, ScheduleRunsRepository],
+  exports: [CandidatesRepository, ScheduleRunsRepository],
 })
 export class SchedulingModule {}
