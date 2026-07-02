@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { AppThrottlerGuard } from "./common/guards/app-throttler.guard";
 import { ConfigModule } from "@nestjs/config";
 import { DatabaseModule } from "./database/database.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
@@ -26,10 +29,15 @@ import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { AssistantModule } from "./modules/assistant/assistant.module";
 import { RecurrenceModule } from "./modules/recurrence/recurrence.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
+import { ObservabilityModule } from "./modules/observability/observability.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Global rate limit (docs/08-roadmap.md Phase 11): 120 requests/minute
+    // per IP by default. Tighter per-route limits (auth, schedule
+    // generation) are set with @Throttle() at the controller level.
+    ThrottlerModule.forRoot([{ name: "default", ttl: 60000, limit: 120 }]),
     DatabaseModule,
     RbacModule,
     CoreDataModule,
@@ -56,6 +64,8 @@ import { CalendarModule } from "./modules/calendar/calendar.module";
     AssistantModule,
     RecurrenceModule,
     CalendarModule,
+    ObservabilityModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}

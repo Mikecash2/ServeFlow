@@ -81,6 +81,7 @@ export default function ChannelThreadPage() {
           className="sf-input"
           style={{ marginBottom: 0, flex: 1 }}
           placeholder="Write a message..."
+          aria-label="Message"
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />

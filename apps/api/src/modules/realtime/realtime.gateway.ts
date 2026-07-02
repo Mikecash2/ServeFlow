@@ -24,7 +24,16 @@ import { JwtAccessPayload } from "../auth/auth.types";
  * `@socket.io/redis-adapter` package wired in here, which is additive, not
  * a rework, once Redis exists.
  */
-@WebSocketGateway({ namespace: "/realtime", cors: { origin: "*" } })
+function corsOrigins(): string[] {
+  const raw = process.env.CORS_ORIGINS;
+  if (!raw) return ["http://localhost:3000"];
+  return raw.split(",").map((o) => o.trim()).filter(Boolean);
+}
+
+// Same origin allowlist as the REST API (docs/08-roadmap.md Phase 11) — a
+// wildcard here would let any website's JS open a socket and, once a user
+// authenticates elsewhere in the browser, potentially join church rooms.
+@WebSocketGateway({ namespace: "/realtime", cors: { origin: corsOrigins(), credentials: true } })
 export class RealtimeGateway implements OnGatewayConnection {
   private readonly logger = new Logger("RealtimeGateway");
 

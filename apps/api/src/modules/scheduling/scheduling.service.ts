@@ -6,6 +6,7 @@ import { ServiceRolesRepository } from "../service-roles/service-roles.repositor
 import { ServicesRepository } from "../services/services.repository";
 import { AssignmentReasoning } from "./scheduling.types";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { ProductAnalyticsService } from "../observability/product-analytics.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { VolunteersRepository } from "../volunteers/volunteers.repository";
 
@@ -27,6 +28,7 @@ export class SchedulingService {
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
     private readonly volunteers: VolunteersRepository,
+    private readonly analytics: ProductAnalyticsService,
   ) {}
 
   /**
@@ -131,6 +133,7 @@ export class SchedulingService {
 
     await this.scheduleRuns.completeRun(churchId, run.id, coveragePct, summary);
     this.realtime.emitCoverageChanged(churchId, { serviceId, runId: run.id, coveragePct, summary });
+    this.analytics.track("schedule_generated", triggeredById, { churchId, serviceId, coveragePct, roleCount: roles.length });
 
     return { runId: run.id, coveragePct, summary, assignments };
   }

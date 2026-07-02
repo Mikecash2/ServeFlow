@@ -133,6 +133,7 @@ export default function AnalyticsPage() {
             className="sf-input"
             style={{ marginBottom: 0, flex: 1 }}
             placeholder="Ask a question..."
+            aria-label="Ask the assistant a question"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
           />

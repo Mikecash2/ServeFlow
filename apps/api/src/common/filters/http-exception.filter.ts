@@ -7,6 +7,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { Response } from "express";
+import * as Sentry from "@sentry/node";
 
 /**
  * Normalizes every thrown error into the API spec's error envelope:
@@ -14,6 +15,15 @@ import { Response } from "express";
  * shape (e.g. from ZodValidationPipe) pass through unchanged; anything else
  * (including unexpected 500s) is mapped to a stable code so clients never
  * have to branch on framework-specific error shapes.
+ *
+ * This filter is constructed manually (`new HttpExceptionFilter()` in
+ * main.ts / tests) rather than via Nest's DI as an APP_FILTER provider, so
+ * it can't constructor-inject ErrorTrackingService — it reads SENTRY_DSN
+ * directly instead (the same pattern Sentry's own NestJS docs use for
+ * exception filters specifically). Sentry.init() is a no-op here if
+ * SENTRY_DSN was never set (no Sentry account in this sandbox — see
+ * serveflow/README.md), so captureException below just does nothing rather
+ * than throwing.
  */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -40,6 +50,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     this.logger.error(exception instanceof Error ? exception.stack : exception);
+    if (process.env.SENTRY_DSN) {
+      Sentry.captureException(exception);
+    }
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" },
     });

@@ -27,19 +27,25 @@ architecture, API spec, AI scheduling design, and roadmap.
   and recurring-service (Phase 3) deferrals — `POST
   .../availability/recurring` and `POST
   .../services/:serviceId/generate-recurring`.
-- **Next up — Phase 11 (final phase on the roadmap):** Hardening & Launch
-  Readiness — OWASP pass, rate limiting, load testing, Sentry/PostHog,
-  accessibility audit, Playwright E2E, and switching from
-  `sandbox-init.sql`/raw `pg` to real Prisma migrations on a machine with
-  network access.
+- **Phase 11 — Hardening & Launch Readiness:** done. This is the **last
+  phase on the roadmap**. Rate limiting (`@nestjs/throttler`, tighter caps
+  on auth/scheduling routes), `helmet()` + an env-configurable CORS
+  allowlist (REST and the realtime gateway both), Sentry/PostHog wired
+  behind the same real-call-if-configured/log-otherwise pattern as the rest
+  of this build, a load test of the scheduling engine (500 volunteers, 15
+  roles: seed 5.36s, generate 3.29s, 100% coverage), a WCAG AA accessibility
+  pass (three real contrast failures found and fixed, not just checked), a
+  backup/restore drill against every table (found and fixed a real FK-order
+  bug, full pass after), and a Playwright E2E suite (two full specs,
+  typechecked; not executable in this sandbox — see deviation #8).
 
 See `../ServeFlow-Docs/08-roadmap.md` for the full per-phase detail on
 what's implemented vs. deliberately simplified in each one — this file only
 tracks the running total and the environment-driven deviations below.
 
-All of the above is **built and passing** — 30/30 unit tests, 37/37
-integration tests against a real Postgres (including three genuine
-WebSocket tests with `socket.io-client`), see `apps/api/test`.
+All of the above is **built and passing** — 34/34 unit tests, 37/37
+integration tests against a real Postgres (including genuine WebSocket
+tests with `socket.io-client`), see `apps/api/test`.
 
 ### Deviations from the long-term architecture doc (all environment-driven, all documented at the call site too)
 
@@ -85,6 +91,23 @@ WebSocket tests with `socket.io-client`), see `apps/api/test`.
    parameterized query templates — the safety property the architecture doc
    calls for — via pattern matching instead of an LLM picking the template.
 
+8. **Playwright E2E specs are written and typecheck clean but don't run in
+   this sandbox.** `npx playwright install chromium` fails the same way
+   Prisma's engine download does: `cdn.playwright.dev` returns `403
+   Connection blocked by network allowlist`. `e2e/tests/onboarding.spec.ts`
+   and `e2e/tests/scheduling-cycle.spec.ts` are real, selector-verified
+   tests — on a machine with normal network access, `npx playwright install
+   && npm run test:e2e` runs them against a live `dev:api` + web server.
+
+9. **Backup/restore uses hand-rolled JSON dump/restore, not `pg_dump`/
+   `pg_restore`.** Those binaries aren't present in this sandbox's Postgres
+   build (only bare `postgres`/`initdb`/`pg_ctl`). `apps/api/scripts/
+   backup-restore-drill.ts` dumps every table to JSON and restores it in
+   FK-dependency order instead — proves the same thing (a real restore that
+   round-trips every row) without the actual pg_dump binary. On a normal
+   deployment, use real `pg_dump`/`pg_restore` or your hosting provider's
+   managed backups.
+
 ## Local development (on a normal machine)
 
 ```bash
@@ -113,6 +136,14 @@ npm run test --workspace apps/api
 DATABASE_URL=postgresql://serveflow:serveflow@localhost:5432/serveflow \
 JWT_ACCESS_SECRET=test JWT_REFRESH_SECRET=test \
 npm run test:integration --workspace apps/api
+```
+
+```bash
+# End-to-end tests (need a running dev:api and dev web server, plus
+# Playwright's browser binary — not installable in this sandbox, see
+# deviation #8). On a normal machine:
+npx playwright install
+npm run test:e2e --workspace e2e
 ```
 
 Demo login after seeding: `admin@kharisbristol.test` / `ChangeMe123!`.

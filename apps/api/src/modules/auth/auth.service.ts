@@ -8,6 +8,7 @@ import { RefreshTokensRepository } from "./refresh-tokens.repository";
 import { MembershipsRepository } from "../rbac/memberships.repository";
 import { ChurchesRepository } from "../core-data/churches.repository";
 import { CampusesRepository } from "../core-data/campuses.repository";
+import { ProductAnalyticsService } from "../observability/product-analytics.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { AuthenticatedUser, JwtAccessPayload } from "./auth.types";
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly memberships: MembershipsRepository,
     private readonly churches: ChurchesRepository,
     private readonly campuses: CampusesRepository,
+    private readonly analytics: ProductAnalyticsService,
   ) {}
 
   /**
@@ -62,6 +64,8 @@ export class AuthService {
 
     await this.campuses.create({ churchId: church.id, name: "Main Campus", isPrimary: true });
     await this.memberships.createChurchAdmin({ userId, churchId: church.id });
+
+    this.analytics.track("church_registered", userId, { churchId: church.id, churchName: church.name });
 
     return this.issueSession(userId);
   }

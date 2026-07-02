@@ -493,7 +493,7 @@ export default function ServiceDetailPage() {
         })}
         {templates.length > 0 && (
           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <select id="templateSelect" className="sf-input" style={{ marginBottom: 0 }}>
+            <select id="templateSelect" aria-label="Checklist template to attach" className="sf-input" style={{ marginBottom: 0 }}>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}

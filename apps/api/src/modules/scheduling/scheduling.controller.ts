@@ -1,4 +1,5 @@
 import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { PermissionGuard } from "../rbac/permission.guard";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -20,7 +21,11 @@ export class SchedulingController {
     private readonly services: ServicesRepository,
   ) {}
 
+  // docs/02-architecture.md §7 calls this out specifically as the most
+  // compute-expensive endpoint in the system — tighter than the global
+  // default.
   @Post("services/:serviceId/schedule-runs")
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @RequirePermission({ resource: "service", action: "write" })
   async generate(
     @Param("churchId") churchId: string,
